@@ -91,8 +91,8 @@
 
 ## Phase 12: Polish
 
-- [ ] T038 История переводов (флаг), автозапуск
-- [ ] T039 tauri-ship: подключение, `pnpm ship doctor`
+- [x] T038 История переводов (флаг), автозапуск
+- [x] T039 tauri-ship: подключение, `pnpm ship doctor`
 - [ ] T040 Ручная проверка SC-002 по 10 программам, `quickstart.md` целиком; замер SC-001/SC-004
 
 ## Dependencies

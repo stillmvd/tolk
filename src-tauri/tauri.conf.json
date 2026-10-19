@@ -26,11 +26,24 @@
     "windows": {
       "nsis": {
         "installMode": "perMachine",
-        "installerIcon": "icons/icon.ico"
+        "installerIcon": "icons/icon.ico",
+        "template": "../node_modules/@stillmvd/tauri-ship/nsis/installer.nsi"
       }
     },
     "externalBin": [
       "binaries/tolk-mt"
-    ]
+    ],
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDkyRUM4RTc2NUIxQTZDN0MKUldSOGJCcGJkbzdza3R1cTFub1d3a0NrZ0hFVWRxRkxjODZPWFdacWg2Zm5zUDZRc2xIelNMbXYK",
+      "endpoints": [
+        "https://github.com/stillmvd/tolk/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }

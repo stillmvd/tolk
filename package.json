@@ -7,13 +7,16 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "tauri": "tauri",
-    "check": "tsc --noEmit && cargo clippy --manifest-path src-tauri/Cargo.toml --workspace --all-targets -- -D warnings && cargo test --manifest-path src-tauri/Cargo.toml --workspace"
+    "check": "tsc --noEmit && cargo clippy --manifest-path src-tauri/Cargo.toml --workspace --all-targets -- -D warnings && cargo test --manifest-path src-tauri/Cargo.toml --workspace",
+    "release": "ship release",
+    "ship": "ship"
   },
   "dependencies": {
+    "@stillmvd/tauri-ship": "github:stillmvd/tauri-ship#v0.1.1",
     "@tauri-apps/api": "^2.12.0",
+    "kockers-ds": "link:..\\..\\Kockers DS",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0",
-    "kockers-ds": "link:..\\..\\Kockers DS"
+    "react-dom": "^19.1.0"
   },
   "devDependencies": {
     "@tauri-apps/cli": "2.11.5",

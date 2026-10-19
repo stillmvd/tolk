@@ -3,6 +3,7 @@ use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, WebviewUrl, WebviewWindowBuilder};
 use tolk_core::config::{parse_hotkey, Config, Mode, MOD_ALT, MOD_CTRL, MOD_SHIFT, MOD_WIN};
 use tolk_core::engine::Rect;
+use tolk_core::history;
 use tolk_core::text::{direction, dress, dress_variants, word_count};
 use tolk_core::translate::{models, MAX_TEXT};
 use tolk_core::win::{context, hook};
@@ -17,6 +18,7 @@ static FILL: Mutex<Option<String>> = Mutex::new(None);
 static BUILDING: AtomicBool = AtomicBool::new(false);
 static DOWNLOADING: AtomicBool = AtomicBool::new(false);
 static CANCEL: AtomicBool = AtomicBool::new(false);
+static INSTALL: AtomicBool = AtomicBool::new(false);
 pub static RECORDING: AtomicBool = AtomicBool::new(false);
 
 static ANCHOR: Mutex<Option<Anchor>> = Mutex::new(None);
@@ -108,6 +110,17 @@ fn place(app: &AppHandle, w: &tauri::WebviewWindow, near: Option<Rect>) {
     let x = pos.x + (size.width as i32 - width) / 2;
     let y = pos.y + size.height as i32 / 5;
     let _ = w.set_position(PhysicalPosition::new(x, y));
+}
+
+pub fn request_install(app: &AppHandle) {
+    INSTALL.store(true, SeqCst);
+    open_settings(app);
+    let _ = app.emit("tolk:install", ());
+}
+
+#[tauri::command]
+pub fn take_install() -> bool {
+    INSTALL.swap(false, SeqCst)
 }
 
 pub fn open_settings(app: &AppHandle) {
@@ -215,8 +228,27 @@ pub fn set_config(app: AppHandle, cfg: Config) -> Result<(), String> {
         }
         return Err(format!("Не получилось сохранить настройки: {e}"));
     }
+    let history = (crate::engine().config().history != cfg.history).then_some(cfg.history);
     crate::apply_config(&app, cfg);
-    Ok(())
+    match history.map(history::set_enabled) {
+        Some(Err(_)) => Err("Историю выключил, но файл не стёрся — удали %APPDATA%\\Tolk\\history.jsonl вручную".into()),
+        _ => Ok(()),
+    }
+}
+
+#[tauri::command]
+pub fn history_list() -> Vec<history::Entry> {
+    history::list()
+}
+
+#[tauri::command]
+pub fn history_clear() -> Result<(), String> {
+    history::clear().map_err(|_| "Не получилось очистить историю".to_string())
+}
+
+#[tauri::command]
+pub fn remember(src: String, dst: String, from: String, to: String) {
+    crate::remember(&src, &dst, Some((&from, &to)));
 }
 
 #[tauri::command]

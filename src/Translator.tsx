@@ -139,6 +139,7 @@ export function Translator() {
     if (!value || stale || leaving.current) return;
     leaving.current = window.setTimeout(() => close(true), 650);
     await invoke("copy_text", { text: value });
+    if (view.kind === "done") invoke("remember", { src: text, dst: value, from: view.out.from, to: view.out.to });
     setCopied(true);
     const box = wrap.current?.getBoundingClientRect();
     const at = el?.getBoundingClientRect();

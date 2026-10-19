@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicBool, Ordering::SeqCst};
 use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 use tauri::tray::TrayIcon;
-use tauri::AppHandle;
+use tauri::{AppHandle, Listener};
 use tolk_core::config::Config;
 use tolk_core::engine::{CoreEvent, Engine, Rect};
 use tolk_core::win::context;
@@ -48,6 +48,10 @@ pub fn set_enabled(app: &AppHandle, on: bool) {
     apply_config(app, cfg);
 }
 
+pub fn remember(src: &str, dst: &str, dir: Option<(&str, &str)>) {
+    tolk_core::history::add(src, dst, dir);
+}
+
 fn pump(app: AppHandle, rx: crossbeam_channel::Receiver<CoreEvent>) {
     let hint = HINT.get_or_init(|| hint::start(|n| engine().pick(n)));
     for ev in rx {
@@ -57,7 +61,12 @@ fn pump(app: AppHandle, rx: crossbeam_channel::Receiver<CoreEvent>) {
             CoreEvent::HideHint => Hint::Hide,
             CoreEvent::Notice { text, error, rect } => Hint::Notice { text, error, rect },
             CoreEvent::Show { original, translation, rect } => {
+                remember(&original, &translation, None);
                 card::show(&app, original, translation, rect);
+                continue;
+            }
+            CoreEvent::Translated { from, to, dir } => {
+                remember(&from, &to, Some((dir.from().code(), dir.to().code())));
                 continue;
             }
             CoreEvent::Window => {
@@ -68,7 +77,6 @@ fn pump(app: AppHandle, rx: crossbeam_channel::Receiver<CoreEvent>) {
                 area::start(app.clone());
                 continue;
             }
-            _ => continue,
         };
         let _ = hint.send(h);
     }
@@ -119,6 +127,10 @@ pub fn run() {
                 ui::open_translator(app, None, None);
             }
         }))
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_ship::init(|app| {
+            let _ = app.remove_tray_by_id("main");
+        }))
         .invoke_handler(tauri::generate_handler![
             card::card_data,
             card::copy_text,
@@ -135,14 +147,21 @@ pub fn run() {
             ui::download_model,
             ui::cancel_download,
             ui::delete_model,
+            ui::take_install,
+            ui::history_list,
+            ui::history_clear,
+            ui::remember,
         ])
         .setup(|app| {
             let (tx, rx) = crossbeam_channel::unbounded();
             let _ = ENGINE.set(Engine::start(Config::load(), tx));
+            let _ = tolk_core::history::set_enabled(engine().config().history);
             let handle = app.handle().clone();
             std::thread::Builder::new().name("tolk-events".into()).spawn(move || pump(handle, rx))?;
             let tray = tray::build(app.handle(), engine().config().enabled, tray_click)?;
             let _ = TRAY.set(tray);
+            let handle = app.handle().clone();
+            app.listen_any(tauri_plugin_ship::STATUS_EVENT, move |e| tray::update_status(&handle, e.payload()));
             Ok(())
         })
         .build(tauri::generate_context!())

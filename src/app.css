@@ -129,6 +129,16 @@ body { font-variant-numeric: tabular-nums; }
 .tk-hk.no { font-weight: 500; color: var(--dim); }
 .tk-exl { display: flex; flex-direction: column; gap: 2px; padding: 4px; border-radius: 26px; background: var(--raised); }
 .tk-exl:empty { display: none; }
+.tk-hbar { display: flex; align-items: center; gap: 8px; padding-top: 6px; }
+.tk-hsearch { flex: 1; }
+.tk-hsearch .tk-ic { width: 16px; height: 16px; }
+.tk-hl { display: flex; flex-direction: column; gap: 2px; padding: 4px; border-radius: 26px; background: var(--raised); }
+.tk-hr { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; align-items: baseline; gap: 16px; min-height: 44px; padding: 11px 16px; border: 0; border-radius: 22px; background: transparent; color: var(--fg); font: inherit; font-size: 14px; text-align: left; cursor: copy; }
+.tk-hr:hover { background: var(--hover-strong); }
+.tk-hr .src { color: var(--dim); overflow-wrap: anywhere; }
+.tk-hr .dst { font-weight: 600; overflow-wrap: anywhere; }
+.tk-hr .at { color: var(--dim); font-size: 12px; white-space: nowrap; }
+.tk-empty { margin: 0; padding: 18px 16px; color: var(--dim); font-size: 14px; }
 .tk-exr { display: flex; align-items: center; gap: 12px; height: 44px; padding: 0 6px 0 16px; border-radius: 999px; }
 .tk-exr .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tk-exr .t-btn .tk-ic, .tk-add .t-btn .tk-ic { width: 14px; height: 14px; }

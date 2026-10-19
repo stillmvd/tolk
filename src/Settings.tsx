@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { checkNow, installNow, useShip } from "@stillmvd/tauri-ship";
 import { Icon, IconName, Mark } from "./Icon";
 
 type Config = {
@@ -17,12 +18,14 @@ type Config = {
 };
 type Model = { ready: boolean; busy: boolean; done: number; total: number };
 type HkKey = "hotkey" | "area_hotkey" | "window_hotkey";
-type Section = "keys" | "mode" | "ex" | "gen";
+type Section = "keys" | "mode" | "ex" | "hist" | "gen";
+type Entry = { t: number; from: string; to: string; src: string; dst: string };
 
 const SECTIONS: [Section, string, IconName][] = [
   ["keys", "Клавиши", "kbd"],
   ["mode", "Перевод", "globe"],
   ["ex", "Исключения", "ban"],
+  ["hist", "История", "clock"],
   ["gen", "Общие", "gear"],
 ];
 const HOTKEYS: [HkKey, string][] = [
@@ -43,6 +46,111 @@ function keyName(code: string): string | null {
   return SPECIAL[code] ?? null;
 }
 
+function when(ms: number) {
+  const d = new Date(ms);
+  const today = d.toDateString() === new Date().toDateString();
+  return today ? d.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }) : d.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" });
+}
+
+function ago(ms: number) {
+  const m = Math.round((Date.now() - ms) / 60000);
+  return m < 1 ? "только что" : m < 60 ? `${m} мин назад` : `в ${new Date(ms).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}`;
+}
+
+function History({ on }: { on: boolean }) {
+  const [items, setItems] = useState<Entry[]>([]);
+  const [q, setQ] = useState("");
+  const [copied, setCopied] = useState<number | null>(null);
+  const load = () => invoke<Entry[]>("history_list").then(setItems);
+
+  useEffect(() => {
+    load();
+    const off = getCurrentWindow().onFocusChanged(({ payload }) => payload && load());
+    return () => {
+      off.then((f) => f());
+    };
+  }, [on]);
+
+  const needle = q.trim().toLowerCase();
+  const shown = needle ? items.filter((e) => `${e.src}\n${e.dst}`.toLowerCase().includes(needle)) : items;
+  const copy = async (e: Entry) => {
+    await invoke("copy_text", { text: e.dst });
+    setCopied(e.t);
+  };
+  const clear = async () => {
+    await invoke("history_clear");
+    load();
+  };
+
+  if (!items.length) return <p className="tk-empty">{on ? "Здесь появятся твои переводы" : "История выключена"}</p>;
+  return (
+    <>
+      <div className="tk-hbar">
+        <label className="t-field tk-hsearch">
+          <Icon name="search" />
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Найти в истории" spellCheck={false} />
+        </label>
+        <button type="button" className="t-btn s32" onClick={clear}>
+          Очистить
+        </button>
+      </div>
+      <div className="tk-hl">
+        {shown.map((e) => (
+          <button type="button" className="tk-hr" key={e.t} onClick={() => copy(e)} title="Скопировать перевод">
+            <span className="src">{e.src}</span>
+            <span className="dst">{e.dst}</span>
+            <span className="at">{copied === e.t ? "Скопировано" : when(e.t)}</span>
+          </button>
+        ))}
+        {!shown.length && <p className="tk-empty">Ничего не нашлось</p>}
+      </div>
+    </>
+  );
+}
+
+function Updates() {
+  const { status } = useShip();
+  const [checking, setChecking] = useState(false);
+  const phase = status?.phase ?? "idle";
+  const busy = checking || phase === "checking" || phase === "downloading" || phase === "installing";
+  const sub = status?.error
+    ? status.error
+    : phase === "ready"
+      ? `Готова версия ${status?.available?.version ?? ""}`
+      : phase === "downloading"
+        ? "Скачиваю обновление"
+        : busy
+          ? "Проверяю"
+          : status?.lastCheck
+            ? `Последняя версия · проверено ${ago(status.lastCheck)}`
+            : "";
+  const check = async () => {
+    setChecking(true);
+    try {
+      await checkNow();
+    } finally {
+      setChecking(false);
+    }
+  };
+  return (
+    <div className="t-setrow tk-btnrow">
+      <div className="tx">
+        <b>Обновления{status?.current ? ` · версия ${status.current}` : ""}</b>
+        {sub && <span>{sub}</span>}
+      </div>
+      {phase === "ready" ? (
+        <button type="button" className="t-btn s32 p" onClick={() => installNow()}>
+          Перезапустить
+        </button>
+      ) : (
+        <button type="button" className="t-btn s32" disabled={busy} onClick={check}>
+          Проверить
+        </button>
+      )}
+    </div>
+  );
+}
+
 export function Settings() {
   const win = getCurrentWindow();
   const [cfg, setCfg] = useState<Config | null>(null);
@@ -55,7 +163,13 @@ export function Settings() {
   useEffect(() => {
     invoke<Config>("get_config").then(setCfg);
     invoke<Model>("model_status").then(setModel);
+    const install = () =>
+      invoke<boolean>("take_install").then((go) => {
+        if (go) installNow();
+      });
+    install();
     const off = [
+      listen("tolk:install", install),
       listen<Config>("config:changed", (e) => setCfg(e.payload)),
       listen<Model>("model:progress", (e) => setModel(e.payload)),
       listen<string | null>("model:done", (e) => e.payload && setMsg({ key: "model", text: e.payload, err: true })),
@@ -259,6 +373,19 @@ export function Settings() {
               {note("ex")}
             </>
           )}
+          {section === "hist" && (
+            <>
+              <div className="t-setrow">
+                <div className="tx">
+                  <b>Хранить историю переводов</b>
+                  <span>Только на этом компьютере, до 500 записей. Выключение стирает историю</span>
+                </div>
+                <button type="button" className="t-tg" role="switch" aria-checked={cfg.history} aria-label="Хранить историю переводов" onClick={() => save({ history: !cfg.history }, "hist")} />
+              </div>
+              {note("hist")}
+              <History on={cfg.history} />
+            </>
+          )}
           {section === "gen" && (
             <>
               <div className="t-setrow">
@@ -267,14 +394,7 @@ export function Settings() {
                 </div>
                 <button type="button" className="t-tg" role="switch" aria-checked={cfg.autostart} aria-label="Запускать вместе с Windows" onClick={() => save({ autostart: !cfg.autostart }, "gen")} />
               </div>
-              <div className="t-setrow">
-                <div className="tx">
-                  <b>Хранить историю переводов</b>
-                  <span>Только на этом компьютере</span>
-                </div>
-                {/* TODO: фаза 12 — запись истории */}
-                <button type="button" className="t-tg" role="switch" aria-checked={cfg.history} aria-label="Хранить историю переводов" onClick={() => save({ history: !cfg.history }, "gen")} />
-              </div>
+              <Updates />
               {note("gen")}
             </>
           )}

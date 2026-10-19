@@ -1,8 +1,27 @@
+use std::sync::{Mutex, OnceLock};
 use tauri::image::Image;
 use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent};
-use tauri::AppHandle;
+use tauri::{AppHandle, Wry};
 use tolk_core::win::theme;
+
+const TOOLTIP: &str = "Tolk — Alt+Q переводит слово или выделение";
+
+static MENU: OnceLock<Menu<Wry>> = OnceLock::new();
+type Shown = (String, MenuItem<Wry>, PredefinedMenuItem<Wry>);
+
+static UPDATE: Mutex<Option<Shown>> = Mutex::new(None);
+
+#[derive(serde::Deserialize)]
+struct Status {
+    phase: String,
+    available: Option<Available>,
+}
+
+#[derive(serde::Deserialize)]
+struct Available {
+    version: String,
+}
 
 pub fn icon(enabled: bool) -> Option<Image<'static>> {
     let bytes: &'static [u8] = match (theme::taskbar_light(), enabled) {
@@ -24,8 +43,9 @@ pub fn build(app: &AppHandle, enabled: bool, on_left: impl Fn(&AppHandle) + Send
         &PredefinedMenuItem::separator(app)?,
         &MenuItem::with_id(app, "quit", "Выйти", true, None::<&str>)?,
     ])?;
+    let _ = MENU.set(menu.clone());
     let mut builder = TrayIconBuilder::with_id("main")
-        .tooltip("Tolk — Alt+Q переводит слово или выделение")
+        .tooltip(TOOLTIP)
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, e| match e.id.as_ref() {
@@ -34,6 +54,7 @@ pub fn build(app: &AppHandle, enabled: bool, on_left: impl Fn(&AppHandle) + Send
             "window" => crate::ui::open_translator(app, None, None),
             "area" => crate::area::start(app.clone()),
             "settings" => crate::ui::open_settings(app),
+            "update" => crate::ui::request_install(app),
             _ => {}
         })
         .on_tray_icon_event(move |tray, e| {
@@ -45,4 +66,25 @@ pub fn build(app: &AppHandle, enabled: bool, on_left: impl Fn(&AppHandle) + Send
         builder = builder.icon(img);
     }
     builder.build(app)
+}
+
+pub fn update_status(app: &AppHandle, payload: &str) {
+    let Ok(s) = serde_json::from_str::<Status>(payload) else { return };
+    let ready = s.available.filter(|_| s.phase == "ready").map(|a| a.version);
+    let (Some(menu), Some(tray)) = (MENU.get(), app.tray_by_id("main")) else { return };
+    let mut shown = UPDATE.lock().unwrap();
+    if shown.as_ref().map(|u| &u.0) == ready.as_ref() {
+        return;
+    }
+    if let Some((_, item, sep)) = shown.take() {
+        let _ = menu.remove(&item);
+        let _ = menu.remove(&sep);
+    }
+    let _ = tray.set_tooltip(Some(TOOLTIP));
+    let Some(version) = ready else { return };
+    let (Ok(item), Ok(sep)) = (MenuItem::with_id(app, "update", format!("Обновить до {version} и перезапустить"), true, None::<&str>), PredefinedMenuItem::separator(app)) else { return };
+    let _ = menu.insert(&item, 0);
+    let _ = menu.insert(&sep, 1);
+    let _ = tray.set_tooltip(Some(format!("Tolk — готово обновление {version}")));
+    *shown = Some((version, item, sep));
 }
