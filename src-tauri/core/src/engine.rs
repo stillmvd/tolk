@@ -31,14 +31,18 @@ impl From<RECT> for Rect {
 pub enum CoreEvent {
     Area,
     Window,
-    Notice(String),
+    Notice { text: String, error: bool, rect: Option<Rect> },
     Translated { from: String, to: String, dir: Dir },
     Show { original: String, translation: String, rect: Option<Rect> },
+    Variants { list: Vec<String>, current: usize, rect: Option<Rect> },
+    Waiting { rect: Option<Rect> },
+    HideHint,
 }
 
 pub struct Engine {
     config: Arc<Mutex<Config>>,
     pub translator: Arc<Translator>,
+    tx: Sender<HookEvent>,
 }
 
 pub fn apply(cfg: &Config) {
@@ -59,10 +63,18 @@ impl Engine {
         let translator = Arc::new(Translator::default());
         let (tx, rx) = crossbeam_channel::bounded(4096);
         hook::run(tx.clone());
-        context::run(tx);
+        context::run(tx.clone());
         let mut worker = Worker { config: config.clone(), translator: translator.clone(), events, buffer: WordBuffer::default(), done: None };
         std::thread::Builder::new().name("tolk-engine".into()).spawn(move || worker.run(rx)).expect("engine thread");
-        Engine { config, translator }
+        Engine { config, translator, tx }
+    }
+
+    pub fn pick(&self, n: usize) {
+        let _ = self.tx.send(HookEvent::Pick(n as u8));
+    }
+
+    pub fn translate_now(&self) {
+        let _ = self.tx.send(HookEvent::Translate);
     }
 
     pub fn config(&self) -> Config {
@@ -89,6 +101,7 @@ struct Done {
     original: String,
     layout: Option<Lang>,
     typed: Option<Typed>,
+    variants: Vec<String>,
 }
 
 struct Worker {
@@ -126,13 +139,19 @@ impl Worker {
                         self.buffer.reset();
                     }
                 }
-                HookEvent::Key(k) => self.key(&k),
-                HookEvent::Click | HookEvent::Foreign => self.buffer.reset(),
+                HookEvent::Key(k) => {
+                    self.hide_hint();
+                    self.key(&k)
+                }
+                HookEvent::Click | HookEvent::Foreign => {
+                    self.hide_hint();
+                    self.buffer.reset()
+                }
                 HookEvent::Translate => self.translate(),
                 HookEvent::Undo => self.undo(),
                 HookEvent::Area => self.emit(CoreEvent::Area),
                 HookEvent::Window => self.emit(CoreEvent::Window),
-                HookEvent::Pick(_) => {}
+                HookEvent::Pick(n) => self.pick(n as usize),
             }
         }
     }
@@ -142,7 +161,11 @@ impl Worker {
     }
 
     fn notice(&self, text: &str) {
-        self.emit(CoreEvent::Notice(text.into()));
+        self.emit(CoreEvent::Notice { text: text.into(), error: false, rect: uia::caret_rect().map(Rect::from) });
+    }
+
+    fn error(&self, text: &str) {
+        self.emit(CoreEvent::Notice { text: text.into(), error: true, rect: uia::caret_rect().map(Rect::from) });
     }
 
     fn offline(&self) -> bool {
@@ -179,6 +202,7 @@ impl Worker {
     }
 
     fn translate(&mut self) {
+        self.hide_hint();
         keys::suppress_menu();
         let ctx = context::current();
         let seq = hook::SEQ.load(SeqCst);
@@ -189,7 +213,7 @@ impl Worker {
             }
         }
         if ctx.elevated {
-            return self.notice("Не могу менять текст в окне администратора");
+            return self.error("Не могу менять текст в окне администратора");
         }
         let typed = self.buffer.has_word(ctx.hwnd);
         match uia::selection() {
@@ -239,7 +263,26 @@ impl Worker {
     }
 
     fn fetch(&self, text: &str, dir: Dir) -> Option<Translation> {
-        match self.translator.translate_long(text, dir, self.offline()) {
+        let done = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let shown = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        {
+            let (done, shown, events) = (done.clone(), shown.clone(), self.events.clone());
+            std::thread::spawn(move || {
+                std::thread::sleep(Duration::from_millis(150));
+                if !done.load(SeqCst) {
+                    let rect = uia::caret_rect().map(Rect::from);
+                    if !done.load(SeqCst) && !shown.swap(true, SeqCst) {
+                        let _ = events.send(CoreEvent::Waiting { rect });
+                    }
+                }
+            });
+        }
+        let got = self.translator.translate_long(text, dir, self.offline());
+        done.store(true, SeqCst);
+        if shown.swap(true, SeqCst) {
+            self.emit(CoreEvent::HideHint);
+        }
+        match got {
             Ok(t) => Some(t),
             Err(f) => {
                 self.fail(f);
@@ -273,16 +316,18 @@ impl Worker {
         hook::ARMED_UNDO.store(true, SeqCst);
         if !put(backspaces, &dressed, ctx.console) {
             hook::ARMED_UNDO.store(false, SeqCst);
-            self.notice("Не получилось заменить текст");
+            self.error("Не получилось заменить текст");
             return false;
         }
         self.buffer.set(ctx.hwnd, format!("{}{}", &before[..start], dressed));
         self.emit(CoreEvent::Translated { from: fragment.to_string(), to: dressed.clone(), dir });
         let original = fragment.to_string();
-        self.done = Some(Done { hwnd: ctx.hwnd, seq, at: Instant::now(), inserted: dressed, original, layout, typed: Some(Typed { before, start, words }) });
+        let variants: Vec<String> = if words == 1 { t.variants.iter().map(|v| dress(fragment, v)).collect() } else { Vec::new() };
+        self.done = Some(Done { hwnd: ctx.hwnd, seq, at: Instant::now(), inserted: dressed, original, layout, typed: Some(Typed { before, start, words }), variants });
         if lang::current() != Some(dir.to()) {
             lang::switch(dir.to());
         }
+        self.show_variants(0);
         true
     }
 
@@ -293,7 +338,7 @@ impl Worker {
             }
         };
         if text.chars().count() > MAX_TEXT {
-            self.notice("Слишком длинный текст — выдели меньше 20 000 символов");
+            self.error("Слишком длинный текст — выдели меньше 20 000 символов");
             return collapse(false);
         }
         let Some(dir) = direction(&text) else {
@@ -314,7 +359,9 @@ impl Worker {
         }
         self.buffer.reset();
         self.emit(CoreEvent::Translated { from: text.clone(), to: dressed.clone(), dir });
-        self.done = Some(Done { hwnd: ctx.hwnd, seq, at: Instant::now(), inserted: dressed, original: text, layout: None, typed: None });
+        let variants: Vec<String> = if crate::text::word_count(&text) == 1 { t.variants.iter().map(|v| dress(&text, v)).collect() } else { Vec::new() };
+        self.done = Some(Done { hwnd: ctx.hwnd, seq, at: Instant::now(), inserted: dressed, original: text, layout: None, typed: None, variants });
+        self.show_variants(0);
     }
 
     fn undo(&mut self) {
@@ -329,7 +376,7 @@ impl Worker {
         }
         let ctx = context::current();
         if !put(keys::units(&d.inserted), &d.original, ctx.console) {
-            self.notice("Не получилось вернуть текст");
+            self.error("Не получилось вернуть текст");
             return;
         }
         if let Some(l) = d.layout {
@@ -343,7 +390,50 @@ impl Worker {
         }
     }
 
+    fn show_variants(&self, current: usize) {
+        let Some(d) = &self.done else { return };
+        if d.variants.len() < 2 {
+            return;
+        }
+        hook::HINT_OPEN.store(true, SeqCst);
+        self.emit(CoreEvent::Variants { list: d.variants.clone(), current, rect: uia::caret_rect().map(Rect::from) });
+    }
+
+    fn hide_hint(&self) {
+        if hook::HINT_OPEN.swap(false, SeqCst) {
+            self.emit(CoreEvent::HideHint);
+        }
+    }
+
+    fn pick(&mut self, n: usize) {
+        keys::suppress_menu();
+        let seq = hook::SEQ.load(SeqCst);
+        let Some(d) = self.done.as_mut().filter(|d| d.seq == seq) else {
+            return self.hide_hint();
+        };
+        hook::ARMED_UNDO.store(true, SeqCst);
+        if n < 1 || n > d.variants.len() {
+            return self.hide_hint();
+        }
+        let next = d.variants[n - 1].clone();
+        if next == d.inserted {
+            return;
+        }
+        let ctx = context::current();
+        if ctx.hwnd != d.hwnd || !put(keys::units(&d.inserted), &next, ctx.console) {
+            hook::ARMED_UNDO.store(false, SeqCst);
+            return self.hide_hint();
+        }
+        if let Some(t) = &d.typed {
+            self.buffer.set(d.hwnd, format!("{}{}", &t.before[..t.start], next));
+        }
+        d.inserted = next;
+        d.at = Instant::now();
+        hook::ARMED_UNDO.store(true, SeqCst);
+        self.show_variants(n - 1);
+    }
+
     fn fail(&self, f: Failure) {
-        self.notice(f.message());
+        self.error(f.message());
     }
 }

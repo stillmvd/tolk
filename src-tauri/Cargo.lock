@@ -3819,10 +3819,13 @@ dependencies = [
 name = "tolk"
 version = "0.1.0"
 dependencies = [
+ "crossbeam-channel",
+ "serde",
  "tauri",
  "tauri-build",
  "tauri-plugin-single-instance",
  "tolk-core",
+ "windows",
 ]
 
 [[package]]

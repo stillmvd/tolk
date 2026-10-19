@@ -11,6 +11,9 @@ importers:
       '@tauri-apps/api':
         specifier: ^2.12.0
         version: 2.12.4
+      kockers-ds:
+        specifier: link:..\..\Kockers DS
+        version: link:../../Kockers DS
       react:
         specifier: ^19.1.0
         version: 19.3.1

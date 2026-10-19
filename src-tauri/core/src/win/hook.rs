@@ -1,6 +1,6 @@
 use crate::config::{MOD_ALT, MOD_CTRL, MOD_SHIFT, MOD_WIN};
 use crossbeam_channel::Sender;
-use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering::SeqCst};
+use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU32, AtomicU64, Ordering::SeqCst};
 use std::sync::OnceLock;
 use windows::core::w;
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
@@ -50,6 +50,7 @@ pub static HK_AREA: AtomicU32 = AtomicU32::new(0);
 pub static HK_WINDOW: AtomicU32 = AtomicU32::new(0);
 pub static SEQ: AtomicU64 = AtomicU64::new(0);
 static ACCEPT_TEST: AtomicBool = AtomicBool::new(false);
+static HINT_RECT: [AtomicI32; 4] = [const { AtomicI32::new(0) }; 4];
 static HOOK_THREAD: AtomicU32 = AtomicU32::new(0);
 static EATEN: [AtomicU64; 4] = [const { AtomicU64::new(0) }; 4];
 static SENDER: OnceLock<Sender<HookEvent>> = OnceLock::new();
@@ -184,8 +185,26 @@ unsafe extern "system" fn keyboard_proc(code: i32, wparam: WPARAM, lparam: LPARA
     CallNextHookEx(None, code, wparam, lparam)
 }
 
+pub fn set_hint_rect(r: Option<(i32, i32, i32, i32)>) {
+    let (l, t, rr, b) = r.unwrap_or((0, 0, 0, 0));
+    for (slot, v) in HINT_RECT.iter().zip([l, t, rr, b]) {
+        slot.store(v, SeqCst);
+    }
+}
+
+fn over_hint(x: i32, y: i32) -> bool {
+    let [l, t, r, b] = [0, 1, 2, 3].map(|i| HINT_RECT[i].load(SeqCst));
+    x >= l && x < r && y >= t && y < b
+}
+
 unsafe extern "system" fn mouse_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
-    if code == HC_ACTION as i32 && matches!(wparam.0 as u32, WM_LBUTTONDOWN | WM_RBUTTONDOWN | WM_MBUTTONDOWN | WM_XBUTTONDOWN) {
+    if code == HC_ACTION as i32
+        && matches!(wparam.0 as u32, WM_LBUTTONDOWN | WM_RBUTTONDOWN | WM_MBUTTONDOWN | WM_XBUTTONDOWN)
+        && !{
+            let ms = &*(lparam.0 as *const MSLLHOOKSTRUCT);
+            over_hint(ms.pt.x, ms.pt.y)
+        }
+    {
         touch();
         push(HookEvent::Click);
     }

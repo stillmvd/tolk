@@ -103,6 +103,30 @@ fn main() {
             }
         }
     };
+    if std::env::args().any(|a| a == "--demo") {
+        unsafe {
+            let _ = SetForegroundWindow(top);
+        }
+        std::thread::sleep(Duration::from_millis(300));
+        type_text("замок");
+        chord(VK_LMENU, VIRTUAL_KEY(b'Q' as u16));
+        println!("{:?}", wait_text(edit, "lock", Duration::from_secs(3)));
+        std::thread::sleep(Duration::from_secs(3));
+        clear(edit);
+        type_text("Good morning, friends");
+        unsafe {
+            SendMessageW(edit, 0x00CF, Some(WPARAM(1)), None);
+            SendMessageW(edit, 0x00B1, Some(WPARAM(0)), Some(LPARAM(-1)));
+        }
+        std::thread::sleep(Duration::from_millis(100));
+        chord(VK_LMENU, VIRTUAL_KEY(b'Q' as u16));
+        std::thread::sleep(Duration::from_secs(4));
+        unsafe {
+            let _ = PostMessageW(Some(top), WM_CLOSE, WPARAM(0), LPARAM(0));
+        }
+        let _ = child.wait();
+        return;
+    }
     let (tx, rx) = crossbeam_channel::unbounded();
     let _engine = Engine::start(Config { repeat_ms: 3000, ..Config::default() }, tx);
     std::thread::spawn(move || {
@@ -130,6 +154,11 @@ fn main() {
     type_text("замок");
     chord(VK_LMENU, VIRTUAL_KEY(b'Q' as u16));
     check("слово ru→en", wait_text(edit, "lock", Duration::from_secs(3)), "lock");
+    std::thread::sleep(Duration::from_millis(300));
+    chord(VK_LMENU, VIRTUAL_KEY(b'2' as u16));
+    check("вариант Alt+2", wait_text(edit, "castle", Duration::from_secs(2)), "castle");
+    chord(VK_LMENU, VIRTUAL_KEY(b'2' as u16));
+    std::thread::sleep(Duration::from_millis(200));
     chord(VK_LCONTROL, VIRTUAL_KEY(b'Z' as u16));
     check("Ctrl+Z", wait_text(edit, "замок", Duration::from_secs(2)), "замок");
 

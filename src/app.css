@@ -1,0 +1,33 @@
+@import "kockers-ds/css/tokens.css";
+@import "kockers-ds/css/kockers.css";
+
+:root {
+  --tk: #e9a8ff;
+  --tk-ink: #2c1038;
+  --tk-soft: color-mix(in srgb, var(--tk) 20%, transparent);
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) { --tk: #9a3fc2; --tk-ink: #ffffff; --tk-soft: color-mix(in srgb, var(--tk) 18%, transparent); }
+}
+:root[data-theme="light"] { --tk: #9a3fc2; --tk-ink: #ffffff; --tk-soft: color-mix(in srgb, var(--tk) 18%, transparent); }
+
+html, body, #root { height: 100%; }
+body { font-variant-numeric: tabular-nums; }
+.tk-ic { display: block; flex: none; width: 16px; height: 16px; }
+
+:root[data-window="card"], :root[data-window="card"] body { background: transparent; overflow: hidden; }
+.tk-card-wrap { display: inline-block; padding: 8px 32px 40px; }
+.tk-card {
+  display: flex; gap: 18px; width: 520px; padding: 16px; border-radius: 24px; align-items: stretch;
+  background: var(--cosmic); box-shadow: var(--ring), 0 16px 32px rgba(0, 0, 0, 0.32);
+  font-family: var(--font-sans); color: var(--fg);
+}
+.tk-card .tx {
+  flex: 1; min-width: 0; margin: 0; font-size: 14px; line-height: 1.55; font-weight: 500;
+  max-height: 320px; overflow-y: auto; white-space: pre-wrap; cursor: copy; user-select: text;
+}
+.tk-card .col { flex: none; display: flex; flex-direction: column; justify-content: flex-end; gap: 6px; }
+.tk-card .col .t-btn { width: 140px; }
+.tk-card .t-btn .tk-ic { width: 14px; height: 14px; }
+.tk-card .t-btn[data-state="done"] { color: var(--ok); }
+.tk-card .t-btn.p[data-state="done"] { background: var(--raised); color: var(--ok); }
