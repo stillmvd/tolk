@@ -29,7 +29,12 @@ export function Translator() {
     if (!el) return;
     el.classList.remove("opening");
     void el.offsetWidth;
-    el.classList.add("opening");
+    el.classList.add("live", "opening");
+  };
+
+  const close = (restore: boolean) => {
+    wrap.current?.classList.remove("live", "opening");
+    requestAnimationFrame(() => requestAnimationFrame(() => invoke("hide_translator", { restore })));
   };
 
   useEffect(() => {
@@ -45,11 +50,11 @@ export function Translator() {
         input.current?.select();
       }),
       win.onFocusChanged(({ payload }) => {
-        if (!payload) invoke("hide_translator", { restore: false });
+        if (!payload) close(false);
       }),
     ];
     const key = (e: KeyboardEvent) => {
-      if (e.key === "Escape") invoke("hide_translator", { restore: true });
+      if (e.key === "Escape") close(true);
     };
     addEventListener("keydown", key);
     return () => {
@@ -121,7 +126,7 @@ export function Translator() {
   ));
 
   return (
-    <div className="tk-tr-wrap" ref={wrap} onMouseDown={(e) => e.target === e.currentTarget && invoke("hide_translator", { restore: true })}>
+    <div className="tk-tr-wrap" ref={wrap} onMouseDown={(e) => e.target === e.currentTarget && close(true)}>
       <div className={`tk-tw${busy ? " waiting" : ""}`}>
         <div className="tk-halo" aria-hidden="true">
           <i />
