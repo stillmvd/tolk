@@ -1,0 +1,16 @@
+node_modules/
+dist/
+src-tauri/target/
+src-tauri/gen/
+*.log
+.env*
+Thumbs.db
+.vscode/
+.idea/
+.claude/
+.specify/
+CLAUDE.md
+HANDOFF.md
+__pycache__/
+.planning/
+desktop.ini

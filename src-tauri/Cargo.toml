@@ -1,0 +1,26 @@
+[workspace]
+members = ["core"]
+default-members = ["core", "."]
+resolver = "2"
+
+[package]
+name = "tolk"
+version = "0.1.0"
+description = "Переводит ru↔en на месте"
+authors = ["stillmvd"]
+edition = "2021"
+
+[lib]
+name = "tolk_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[profile.dev]
+debug = "line-tables-only"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tolk-core = { path = "core" }
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
+tauri-plugin-single-instance = "2"
