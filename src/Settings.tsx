@@ -1,0 +1,246 @@
+import { useEffect, useRef, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { Icon, IconName, Mark } from "./Icon";
+
+type Config = {
+  enabled: boolean;
+  hotkey: string;
+  area_hotkey: string;
+  window_hotkey: string | null;
+  mode: "online" | "offline";
+  excluded: string[];
+  autostart: boolean;
+  history: boolean;
+  repeat_ms: number;
+};
+type HkKey = "hotkey" | "area_hotkey" | "window_hotkey";
+type Section = "keys" | "mode" | "ex" | "gen";
+
+const SECTIONS: [Section, string, IconName][] = [
+  ["keys", "Клавиши", "kbd"],
+  ["mode", "Перевод", "globe"],
+  ["ex", "Исключения", "ban"],
+  ["gen", "Общие", "gear"],
+];
+const HOTKEYS: [HkKey, string][] = [
+  ["hotkey", "Перевести слово или выделение"],
+  ["area_hotkey", "Перевести область экрана"],
+  ["window_hotkey", "Открыть переводчик"],
+];
+const GHBDTN = ["Pause", "Shift+Pause"];
+const MODIFIERS = ["ControlLeft", "ControlRight", "AltLeft", "AltRight", "ShiftLeft", "ShiftRight", "MetaLeft", "MetaRight"];
+const SPECIAL: Record<string, string> = { Pause: "Pause", Insert: "Insert", Space: "Space", Backquote: "`" };
+
+function keyName(code: string): string | null {
+  if (/^Key[A-Z]$/.test(code)) return code.slice(3);
+  if (/^Digit\d$/.test(code)) return code.slice(5);
+  if (/^F([1-9]|1\d|2[0-4])$/.test(code)) return code;
+  return SPECIAL[code] ?? null;
+}
+
+export function Settings() {
+  const win = getCurrentWindow();
+  const [cfg, setCfg] = useState<Config | null>(null);
+  const [section, setSection] = useState<Section>("keys");
+  const [rec, setRec] = useState<HkKey | null>(null);
+  const [msg, setMsg] = useState<{ key: string; text: string; err: boolean } | null>(null);
+
+  useEffect(() => {
+    invoke<Config>("get_config").then(setCfg);
+    const off = listen<Config>("config:changed", (e) => setCfg(e.payload));
+    return () => {
+      off.then((f) => f());
+    };
+  }, []);
+
+  const latest = useRef<Config | null>(null);
+  latest.current = cfg;
+
+  const save = async (patch: Partial<Config>, key = "") => {
+    if (!latest.current) return false;
+    const next = { ...latest.current, ...patch };
+    try {
+      await invoke("set_config", { cfg: next });
+      latest.current = next;
+      setCfg(next);
+      return true;
+    } catch (e) {
+      setMsg({ key, text: String(e), err: true });
+      return false;
+    }
+  };
+
+  const stopRec = () => {
+    setRec(null);
+    invoke("set_recording", { on: false });
+  };
+
+  useEffect(() => {
+    if (!rec || !cfg) return;
+    const onKey = async (e: KeyboardEvent) => {
+      e.preventDefault();
+      if (e.repeat || MODIFIERS.includes(e.code)) return;
+      if (e.code === "Escape") return stopRec();
+      if (e.code === "Backspace" && rec === "window_hotkey") {
+        stopRec();
+        setMsg(null);
+        return save({ window_hotkey: null }, rec);
+      }
+      const key = keyName(e.code);
+      if (!key) return setMsg({ key: rec, text: "Эту клавишу нельзя назначить", err: true });
+      const combo = [e.ctrlKey && "Ctrl", e.altKey && "Alt", e.shiftKey && "Shift", e.metaKey && "Win", key].filter(Boolean).join("+");
+      const bare = !e.ctrlKey && !e.altKey && !e.metaKey && !/^(F\d+|Pause|Insert)$/.test(key);
+      if (bare) return setMsg({ key: rec, text: "Добавь Ctrl, Alt или Win", err: true });
+      if (GHBDTN.includes(combo)) return setMsg({ key: rec, text: "Это сочетание у Ghbdtn", err: true });
+      const twin = HOTKEYS.find(([k]) => k !== rec && cfg[k] === combo);
+      if (twin) return setMsg({ key: rec, text: `Уже занято: ${twin[1].toLowerCase()}`, err: true });
+      const target = rec;
+      stopRec();
+      const free = await invoke<boolean>("hotkey_free", { combo });
+      if ((await save({ [target]: combo }, target)) && !free) {
+        setMsg({ key: target, text: "Это сочетание занято другой программой — она перестанет его получать", err: false });
+      } else if (free) setMsg(null);
+    };
+    addEventListener("keydown", onKey);
+    const offBlur = win.onFocusChanged(({ payload }) => !payload && stopRec());
+    return () => {
+      removeEventListener("keydown", onKey);
+      offBlur.then((f) => f());
+    };
+  }, [rec, cfg]);
+
+  const startRec = (key: HkKey) => {
+    setMsg(null);
+    setRec(key);
+    invoke("set_recording", { on: true });
+  };
+
+  const addProgram = async () => {
+    if (!cfg) return;
+    const name = await invoke<string | null>("pick_program");
+    const excluded = latest.current?.excluded ?? [];
+    if (name && !excluded.includes(name)) save({ excluded: [...excluded, name] }, "ex");
+  };
+
+  if (!cfg) return null;
+
+  const note = (key: string) => msg?.key === key && <p className={`t-field-msg${msg.err ? " err" : ""}`}>{msg.text}</p>;
+
+  return (
+    <div className="tk-set">
+      <div className="t-titlebar" data-tauri-drag-region>
+        <Mark />
+        <span className="name" data-tauri-drag-region>
+          Настройки
+        </span>
+        <span className="tk-sp" data-tauri-drag-region />
+        <div className="t-win">
+          <button type="button" onClick={() => win.minimize()} aria-label="Свернуть">
+            <Icon name="min" />
+          </button>
+          <button type="button" className="close" onClick={() => win.close()} aria-label="Закрыть">
+            <Icon name="x" />
+          </button>
+        </div>
+      </div>
+      <div className="tk-split">
+        <nav className="t-list tk-nav">
+          {SECTIONS.map(([key, name, icon]) => (
+            <button type="button" key={key} className={`t-row${section === key ? " on" : ""}`} aria-current={section === key ? "page" : undefined} onClick={() => setSection(key)}>
+              <Icon name={icon} />
+              {name}
+            </button>
+          ))}
+        </nav>
+        <main className="tk-pg">
+          {section === "keys" &&
+            HOTKEYS.map(([key, name]) => (
+              <div className="tk-item" key={key}>
+                <div className="t-setrow tk-btnrow">
+                  <div className="tx">
+                    <b>{name}</b>
+                  </div>
+                  <span className={`tk-hk${rec !== key && !cfg[key] ? " no" : ""}`}>{rec === key ? "Нажми сочетание…" : cfg[key] || "Не задано"}</span>
+                  <button type="button" className="t-btn s32" onClick={() => (rec === key ? stopRec() : startRec(key))}>
+                    {rec === key ? "Отменить" : "Изменить"}
+                  </button>
+                </div>
+                {note(key)}
+              </div>
+            ))}
+          {section === "mode" && (
+            <>
+              <div className="t-setrow tk-segrow">
+                <div className="tx">
+                  <b>Переводить</b>
+                </div>
+                <div className="t-seg" role="group" aria-label="Режим">
+                  <button type="button" aria-pressed={cfg.mode === "online"} onClick={() => save({ mode: "online" }, "mode")}>
+                    Онлайн
+                  </button>
+                  <button type="button" aria-pressed={cfg.mode === "offline"} onClick={() => save({ mode: "offline" }, "mode")}>
+                    Только офлайн
+                  </button>
+                </div>
+              </div>
+              <div className="t-setrow tk-btnrow">
+                <div className="tx">
+                  <b>Офлайн-модель</b>
+                  <span>≈ 300 МБ, русский и английский</span>
+                </div>
+                {/* TODO: фаза 11 — скачивание модели с прогрессом */}
+                <button type="button" className="t-btn s32" disabled>
+                  Скачать
+                </button>
+              </div>
+              {note("mode")}
+            </>
+          )}
+          {section === "ex" && (
+            <>
+              <div className="tk-exl">
+                {cfg.excluded.map((name) => (
+                  <div className="tk-exr" key={name}>
+                    <i className="tk-app">{name[0]?.toUpperCase()}</i>
+                    <span className="nm">{name}</span>
+                    <button type="button" className="t-btn g ib s32" aria-label={`Убрать ${name}`} onClick={() => save({ excluded: cfg.excluded.filter((e) => e !== name) }, "ex")}>
+                      <Icon name="x" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <div className="tk-add">
+                <button type="button" className="t-btn s32" onClick={addProgram}>
+                  <Icon name="plus" />
+                  Добавить программу
+                </button>
+              </div>
+              {note("ex")}
+            </>
+          )}
+          {section === "gen" && (
+            <>
+              <div className="t-setrow">
+                <div className="tx">
+                  <b>Запускать вместе с Windows</b>
+                </div>
+                <button type="button" className="t-tg" role="switch" aria-checked={cfg.autostart} aria-label="Запускать вместе с Windows" onClick={() => save({ autostart: !cfg.autostart }, "gen")} />
+              </div>
+              <div className="t-setrow">
+                <div className="tx">
+                  <b>Хранить историю переводов</b>
+                  <span>Только на этом компьютере</span>
+                </div>
+                {/* TODO: фаза 12 — запись истории */}
+                <button type="button" className="t-tg" role="switch" aria-checked={cfg.history} aria-label="Хранить историю переводов" onClick={() => save({ history: !cfg.history }, "gen")} />
+              </div>
+              {note("gen")}
+            </>
+          )}
+        </main>
+      </div>
+    </div>
+  );
+}

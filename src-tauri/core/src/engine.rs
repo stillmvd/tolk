@@ -252,8 +252,7 @@ impl Worker {
             }
         }
         if tray {
-            // TODO: фаза 9 — открыть окно-переводчик
-            return self.notice("Нечего переводить");
+            return self.emit(CoreEvent::Window);
         }
         keys::replay(hook::HK_TRANSLATE.load(SeqCst));
     }

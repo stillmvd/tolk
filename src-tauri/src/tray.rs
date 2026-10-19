@@ -30,7 +30,9 @@ pub fn build(app: &AppHandle, enabled: bool, on_left: impl Fn(&AppHandle) + Send
         .show_menu_on_left_click(false)
         .on_menu_event(|app, e| match e.id.as_ref() {
             "quit" => app.exit(0),
-            "enabled" => crate::set_enabled(!crate::engine().config().enabled),
+            "enabled" => crate::set_enabled(app, !crate::engine().config().enabled),
+            "window" => crate::ui::open_translator(app, None),
+            "settings" => crate::ui::open_settings(app),
             _ => {}
         })
         .on_tray_icon_event(move |tray, e| {

@@ -58,7 +58,7 @@ export function Card() {
             <span className="s-idle"><Icon name="copy" />Скопировать</span>
             <span className="s-done"><Icon name="check" />Скопировано</span>
           </button>
-          <button className="t-btn s32" onClick={() => invoke("open_translator", { text: data.original })}>
+          <button className="t-btn s32" onClick={() => invoke("open_translator_with", { text: data.original }).then(() => win.close())}>
             <Icon name="win" />В окно
           </button>
         </div>
