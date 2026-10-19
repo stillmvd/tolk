@@ -150,7 +150,10 @@ impl Worker {
                 HookEvent::Translate => self.translate(false),
                 HookEvent::TranslateNow => self.translate(true),
                 HookEvent::Undo => self.undo(),
-                HookEvent::Area => self.emit(CoreEvent::Area),
+                HookEvent::Area => {
+                    keys::suppress_menu();
+                    self.emit(CoreEvent::Area)
+                }
                 HookEvent::Window => self.emit(CoreEvent::Window),
                 HookEvent::Pick(n) => self.pick(n as usize),
             }

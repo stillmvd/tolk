@@ -72,9 +72,11 @@ body { font-variant-numeric: tabular-nums; }
   box-shadow: var(--ring), 0 12px 28px rgba(0, 0, 0, 0.28); font-family: var(--font-sans); color: var(--fg);
 }
 .tk-tc .row { display: flex; gap: 12px; padding-left: 22px; }
-.tk-tc .in { align-items: center; height: 60px; padding-right: 12px; }
-.tk-tc .in input { flex: 1; min-width: 0; border: 0; padding: 0; background: transparent; color: var(--fg); caret-color: var(--fg); font: inherit; font-size: 17px; font-weight: 500; outline: none; }
-.tk-tc .in input::placeholder { color: var(--dim); font-weight: 400; opacity: 1; }
+.tk-tc .in { align-items: flex-start; min-height: 60px; padding-right: 12px; }
+.tk-tc .in > .code { padding-top: 23px; }
+.tk-tc .in > .t-btn { margin-top: 14px; }
+.tk-tc .in textarea { flex: 1; min-width: 0; max-height: 156px; border: 0; padding: 18px 0; background: transparent; color: var(--fg); caret-color: var(--fg); font: inherit; font-size: 17px; line-height: 24px; font-weight: 500; outline: none; resize: none; field-sizing: content; overflow-y: auto; }
+.tk-tc .in textarea::placeholder { color: var(--dim); font-weight: 400; opacity: 1; }
 .tk-tc .in .t-btn .tk-ic { width: 16px; height: 16px; }
 .tk-tc .out { align-items: flex-start; padding: 14px 12px 16px 22px; border-top: 1px solid var(--line); }
 .tk-tc .out > .code { padding-top: 7px; }
@@ -87,7 +89,7 @@ body { font-variant-numeric: tabular-nums; }
 @keyframes tk-word { from { opacity: 0; filter: blur(8px); translate: 0 6px; } }
 .tk-vs .t-chip { animation: tk-chip 320ms var(--ease) both; }
 @keyframes tk-chip { from { opacity: 0; scale: 0.8; } }
-.tk-tw.waiting .in input {
+.tk-tw.waiting .in textarea {
   background: linear-gradient(100deg, var(--fg) 40%, var(--tk) 50%, var(--fg) 60%) 0 0 / 300% 100%;
   -webkit-background-clip: text; background-clip: text; color: transparent; animation: tk-shine 1.6s linear infinite;
 }

@@ -239,7 +239,7 @@ fn utf16(s: &str) -> Vec<u16> {
     s.encode_utf16().collect()
 }
 
-type Box4 = (i32, i32, i32, i32);
+pub(crate) type Box4 = (i32, i32, i32, i32);
 
 fn caret() -> Option<Box4> {
     unsafe {
@@ -279,7 +279,7 @@ fn anchor(rect: Option<Rect>) -> Box4 {
     }
 }
 
-fn metrics(a: Box4) -> (f32, RECT) {
+pub(crate) fn metrics(a: Box4) -> (f32, RECT) {
     unsafe {
         let m = MonitorFromPoint(POINT { x: (a.0 + a.2) / 2, y: (a.1 + a.3) / 2 }, MONITOR_DEFAULTTONEAREST);
         let (mut dx, mut dy) = (96, 96);

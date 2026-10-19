@@ -1,3 +1,4 @@
+mod area;
 mod card;
 mod hint;
 mod tray;
@@ -10,13 +11,20 @@ use std::time::{Duration, Instant};
 use tauri::tray::TrayIcon;
 use tauri::AppHandle;
 use tolk_core::config::Config;
-use tolk_core::engine::{CoreEvent, Engine};
+use tolk_core::engine::{CoreEvent, Engine, Rect};
 use tolk_core::win::context;
 use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, IsIconic, IsWindow, SetForegroundWindow, ShowWindow, SW_RESTORE};
 
 static TRAY: OnceLock<TrayIcon> = OnceLock::new();
 static ENGINE: OnceLock<Engine> = OnceLock::new();
 static TRAY_BUSY: AtomicBool = AtomicBool::new(false);
+static HINT: OnceLock<crossbeam_channel::Sender<Hint>> = OnceLock::new();
+
+pub fn notice(text: String, error: bool, rect: Option<Rect>) {
+    if let Some(h) = HINT.get() {
+        let _ = h.send(Hint::Notice { text, error, rect });
+    }
+}
 
 pub fn engine() -> &'static Engine {
     ENGINE.get().expect("engine")
@@ -41,7 +49,7 @@ pub fn set_enabled(app: &AppHandle, on: bool) {
 }
 
 fn pump(app: AppHandle, rx: crossbeam_channel::Receiver<CoreEvent>) {
-    let hint = hint::start(|n| engine().pick(n));
+    let hint = HINT.get_or_init(|| hint::start(|n| engine().pick(n)));
     for ev in rx {
         let h = match ev {
             CoreEvent::Variants { list, current, rect } => Hint::Variants { list, current, rect },
@@ -53,7 +61,11 @@ fn pump(app: AppHandle, rx: crossbeam_channel::Receiver<CoreEvent>) {
                 continue;
             }
             CoreEvent::Window => {
-                ui::open_translator(&app, None);
+                ui::open_translator(&app, None, None);
+                continue;
+            }
+            CoreEvent::Area => {
+                area::start(app.clone());
                 continue;
             }
             _ => continue,
@@ -71,7 +83,7 @@ fn tray_click(app: &AppHandle) {
         if focus_last() {
             engine().translate_now();
         } else {
-            ui::open_translator(&app, None);
+            ui::open_translator(&app, None, None);
         }
         TRAY_BUSY.store(false, SeqCst);
     });
@@ -104,7 +116,7 @@ pub fn run() {
             if args.iter().any(|a| a == "--settings") {
                 ui::open_settings(app);
             } else if args.iter().any(|a| a == "--translator") {
-                ui::open_translator(app, None);
+                ui::open_translator(app, None, None);
             }
         }))
         .invoke_handler(tauri::generate_handler![

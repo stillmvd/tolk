@@ -30,7 +30,7 @@ export function Translator() {
   const [stale, setStale] = useState(false);
   const [busy, setBusy] = useState(false);
   const [burst, setBurst] = useState<Burst | null>(null);
-  const input = useRef<HTMLInputElement>(null);
+  const input = useRef<HTMLTextAreaElement>(null);
   const wrap = useRef<HTMLDivElement>(null);
   const btn = useRef<HTMLButtonElement>(null);
   const seq = useRef(0);
@@ -128,7 +128,7 @@ export function Translator() {
       await win.setFocus();
       input.current?.focus();
     });
-  }, [view, copied]);
+  }, [view, copied, text]);
 
   const from = view.kind === "done" ? view.out.from : flip ? other(guess(text)) : guess(text);
   const result = view.kind === "done" ? view.out.text : "";
@@ -145,11 +145,15 @@ export function Translator() {
     if (box && at) setBurst({ id: Date.now(), x: at.left + at.width / 2 - box.left, y: at.top + at.height / 2 - box.top, parts: sparks() });
   };
 
-  const words = result.split(/(\s+)/).map((w, i) => (
-    <span className="w" key={i} style={{ animationDelay: `${Math.floor(i / 2) * 60}ms` }}>
-      {w}
-    </span>
-  ));
+  const words = result.split(/(\s+)/).map((w, i) =>
+    i % 2 ? (
+      w
+    ) : (
+      <span className="w" key={i} style={{ animationDelay: `${Math.floor(i / 2) * 60}ms` }}>
+        {w}
+      </span>
+    ),
+  );
 
   return (
     <div className="tk-tr-wrap" ref={wrap} onMouseDown={(e) => e.target === e.currentTarget && close(true)}>
@@ -161,11 +165,16 @@ export function Translator() {
         <div className="tk-tc">
         <label className="row in">
           <span className="code">{from.toUpperCase()}</span>
-          <input
+          <textarea
             ref={input}
+            rows={1}
             value={text}
             onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && copy(result, btn.current)}
+            onKeyDown={(e) => {
+              if (e.key !== "Enter" || e.shiftKey || e.nativeEvent.isComposing) return;
+              e.preventDefault();
+              copy(result, btn.current);
+            }}
             placeholder="Введи или вставь текст"
             spellCheck={false}
             autoFocus

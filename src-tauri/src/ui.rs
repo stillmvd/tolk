@@ -2,6 +2,7 @@ use std::sync::atomic::{AtomicBool, Ordering::SeqCst};
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, WebviewUrl, WebviewWindowBuilder};
 use tolk_core::config::{parse_hotkey, Config, Mode, MOD_ALT, MOD_CTRL, MOD_SHIFT, MOD_WIN};
+use tolk_core::engine::Rect;
 use tolk_core::text::{direction, dress, word_count};
 use tolk_core::translate::MAX_TEXT;
 use tolk_core::win::{context, hook};
@@ -16,11 +17,22 @@ static FILL: Mutex<Option<String>> = Mutex::new(None);
 static BUILDING: AtomicBool = AtomicBool::new(false);
 pub static RECORDING: AtomicBool = AtomicBool::new(false);
 
+static ANCHOR: Mutex<Option<Anchor>> = Mutex::new(None);
+
 const TRANSLATOR_W: f64 = 648.0;
 
-pub fn open_translator(app: &AppHandle, text: Option<String>) {
+#[derive(Clone, Copy)]
+struct Anchor {
+    x: i32,
+    edge: i32,
+    up: bool,
+    lo: i32,
+    hi: i32,
+}
+
+pub fn open_translator(app: &AppHandle, text: Option<String>, near: Option<Rect>) {
     if let Some(w) = app.get_webview_window("translator") {
-        place(app, &w);
+        place(app, &w, near);
         if let Some(t) = text {
             let _ = w.emit("translator:fill", t);
         }
@@ -47,14 +59,43 @@ pub fn open_translator(app: &AppHandle, text: Option<String>) {
             .inner_size(TRANSLATOR_W, 140.0)
             .build();
         match built {
-            Ok(w) => place(&app, &w),
+            Ok(w) => {
+                let follower = w.clone();
+                w.on_window_event(move |e| {
+                    if let tauri::WindowEvent::Resized(s) = e {
+                        follow(&follower, s.height);
+                    }
+                });
+                place(&app, &w, near);
+            }
             Err(e) => eprintln!("translator: {e}"),
         }
         BUILDING.store(false, SeqCst);
     });
 }
 
-fn place(app: &AppHandle, w: &tauri::WebviewWindow) {
+fn follow(w: &tauri::WebviewWindow, height: u32) {
+    let Some(a) = *ANCHOR.lock().unwrap() else { return };
+    let h = height as i32;
+    let top = if a.up { a.edge - h } else { a.edge };
+    let _ = w.set_position(PhysicalPosition::new(a.x, top.min(a.hi - h).max(a.lo)));
+}
+
+fn place(app: &AppHandle, w: &tauri::WebviewWindow, near: Option<Rect>) {
+    *ANCHOR.lock().unwrap() = near.map(|r| {
+        let (k, work) = crate::hint::metrics((r.left, r.top, r.right, r.bottom));
+        let k = k as f64;
+        let (pad, width, gap) = (64.0 * k, TRANSLATOR_W * k, 8.0 * k);
+        let cx = (r.left + r.right) as f64 / 2.0;
+        let x = (cx - width / 2.0).min(work.right as f64 + pad - width).max(work.left as f64 - pad);
+        let up = r.top - work.top > work.bottom - r.bottom;
+        let edge = if up { r.top as f64 - gap + pad } else { r.bottom as f64 + gap - pad };
+        Anchor { x: x as i32, edge: edge as i32, up, lo: (work.top as f64 - pad) as i32, hi: (work.bottom as f64 + pad) as i32 }
+    });
+    if near.is_some() {
+        follow(w, w.outer_size().map(|s| s.height).unwrap_or(0));
+        return;
+    }
     let mut p = POINT::default();
     unsafe {
         let _ = GetCursorPos(&mut p);
@@ -98,7 +139,7 @@ pub fn open_settings(app: &AppHandle) {
 
 #[tauri::command]
 pub fn open_translator_with(app: AppHandle, text: Option<String>) {
-    open_translator(&app, text);
+    open_translator(&app, text, None);
 }
 
 #[tauri::command]

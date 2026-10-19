@@ -31,7 +31,8 @@ pub fn build(app: &AppHandle, enabled: bool, on_left: impl Fn(&AppHandle) + Send
         .on_menu_event(|app, e| match e.id.as_ref() {
             "quit" => app.exit(0),
             "enabled" => crate::set_enabled(app, !crate::engine().config().enabled),
-            "window" => crate::ui::open_translator(app, None),
+            "window" => crate::ui::open_translator(app, None, None),
+            "area" => crate::area::start(app.clone()),
             "settings" => crate::ui::open_settings(app),
             _ => {}
         })

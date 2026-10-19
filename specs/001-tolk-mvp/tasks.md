@@ -78,10 +78,10 @@
 
 ## Phase 10: US7 — перевод области (P3)
 
-- [ ] T032 [US7] `src-tauri/src/area.rs`: оверлей выбора области (затемнение, рамка, Esc/ПКМ), DPI
-- [ ] T033 [US7] `win/ocr.rs`: BitBlt → `SoftwareBitmap` → `OcrEngine` en/ru, склейка строк и абзацев, увеличение
+- [x] T032 [US7] `src-tauri/src/area.rs`: оверлей выбора области (затемнение, рамка, Esc/ПКМ), DPI
+- [x] T033 [US7] `win/ocr.rs`: BitBlt → `SoftwareBitmap` → `OcrEngine` en/ru, склейка строк и абзацев, увеличение
   мелкого текста; нет языка → сообщение
-- [ ] T034 [US7] Результат → окно-переводчик (`translator:fill`)
+- [x] T034 [US7] Результат → окно-переводчик (`translator:fill`)
 
 ## Phase 11: Офлайн
 
