@@ -12,6 +12,7 @@ use windows::Win32::UI::WindowsAndMessaging::*;
 
 pub const MARK: usize = 0x544F_4C4B;
 pub const GHBDTN_MARK: usize = 0x4748_4244;
+pub const TEST_MARK: usize = 0x544F_5453;
 const WM_REINSTALL: u32 = WM_APP + 1;
 const WM_QUIT_HOOK: u32 = WM_APP + 2;
 
@@ -48,6 +49,7 @@ pub static HK_TRANSLATE: AtomicU32 = AtomicU32::new(0);
 pub static HK_AREA: AtomicU32 = AtomicU32::new(0);
 pub static HK_WINDOW: AtomicU32 = AtomicU32::new(0);
 pub static SEQ: AtomicU64 = AtomicU64::new(0);
+static ACCEPT_TEST: AtomicBool = AtomicBool::new(false);
 static HOOK_THREAD: AtomicU32 = AtomicU32::new(0);
 static EATEN: [AtomicU64; 4] = [const { AtomicU64::new(0) }; 4];
 static SENDER: OnceLock<Sender<HookEvent>> = OnceLock::new();
@@ -132,7 +134,8 @@ fn on_key(kb: &KBDLLHOOKSTRUCT) -> bool {
         }
         return false;
     }
-    if kb.flags.contains(LLKHF_INJECTED) {
+    let test = kb.dwExtraInfo == TEST_MARK && ACCEPT_TEST.load(SeqCst);
+    if kb.flags.contains(LLKHF_INJECTED) && !test {
         if !up && !is_modifier(vk) {
             touch();
             push(HookEvent::Foreign);
@@ -154,7 +157,7 @@ fn on_key(kb: &KBDLLHOOKSTRUCT) -> bool {
         alt: down(VK_MENU),
         win: down(VK_LWIN) || down(VK_RWIN),
         caps: unsafe { GetKeyState(VK_CAPITAL.0 as i32) } & 1 != 0,
-        unicode: None,
+        unicode: (vk == VK_PACKET.0).then_some(kb.scanCode as u16),
     };
     if let Some(ev) = decide(&k, ENABLED.load(SeqCst), BLOCKED.load(SeqCst), ARMED_UNDO.load(SeqCst), HINT_OPEN.load(SeqCst)) {
         if ev != HookEvent::Undo {
@@ -210,6 +213,7 @@ fn uninstall(hooks: Hooks) {
 
 pub fn run(tx: Sender<HookEvent>) -> std::thread::JoinHandle<()> {
     let _ = SENDER.set(tx);
+    ACCEPT_TEST.store(std::env::var_os("TOLK_ACCEPT_TEST").is_some_and(|v| v == "1"), SeqCst);
     std::thread::Builder::new()
         .name("tolk-hook".into())
         .spawn(|| unsafe {

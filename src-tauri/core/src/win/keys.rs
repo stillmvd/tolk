@@ -1,4 +1,5 @@
 use super::hook::MARK;
+use std::time::{Duration, Instant};
 use windows::Win32::UI::Input::KeyboardAndMouse::*;
 
 const MODIFIERS: [VIRTUAL_KEY; 8] = [VK_LCONTROL, VK_RCONTROL, VK_LMENU, VK_RMENU, VK_LWIN, VK_RWIN, VK_LSHIFT, VK_RSHIFT];
@@ -24,19 +25,27 @@ fn held_modifiers() -> Vec<VIRTUAL_KEY> {
     MODIFIERS.into_iter().filter(|vk| unsafe { GetAsyncKeyState(vk.0 as i32) } < 0).collect()
 }
 
+pub fn wait_release(limit: Duration) -> bool {
+    let start = Instant::now();
+    while !held_modifiers().is_empty() {
+        if start.elapsed() > limit {
+            return false;
+        }
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    true
+}
+
 fn clean(body: Vec<INPUT>) -> bool {
+    wait_release(Duration::from_millis(1500));
     let held = held_modifiers();
     let menu = held.iter().any(|vk| matches!(*vk, VK_LMENU | VK_RMENU | VK_LWIN | VK_RWIN));
-    let mut out: Vec<INPUT> = Vec::with_capacity(body.len() + held.len() * 2 + 4);
+    let mut out: Vec<INPUT> = Vec::with_capacity(body.len() + held.len() + 2);
     if menu {
         tap(&mut out, NOOP);
     }
     out.extend(held.iter().map(|&vk| key(vk, 0, KEYEVENTF_KEYUP)));
     out.extend(body);
-    out.extend(held.iter().map(|&vk| key(vk, 0, KEYBD_EVENT_FLAGS(0))));
-    if menu {
-        tap(&mut out, NOOP);
-    }
     send(&out)
 }
 
@@ -65,6 +74,21 @@ pub fn replace(backspaces: usize, text: &str) -> bool {
         tap(&mut out, VK_BACK);
     }
     unicode(&mut out, text);
+    clean(out)
+}
+
+pub fn select_back(n: usize) -> bool {
+    let mut out = vec![key(VK_LSHIFT, 0, KEYBD_EVENT_FLAGS(0))];
+    for _ in 0..n {
+        tap(&mut out, VK_LEFT);
+    }
+    out.push(key(VK_LSHIFT, 0, KEYEVENTF_KEYUP));
+    clean(out)
+}
+
+pub fn press(vk: VIRTUAL_KEY) -> bool {
+    let mut out = Vec::new();
+    tap(&mut out, vk);
     clean(out)
 }
 

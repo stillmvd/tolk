@@ -116,6 +116,28 @@ pub fn word_count(text: &str) -> usize {
     (0..chars.len()).filter(|&i| in_word(&chars, i) && (i == 0 || !in_word(&chars, i - 1))).count()
 }
 
+pub fn chunks(text: &str, max: usize) -> Vec<&str> {
+    let mut out = Vec::new();
+    let mut rest = text;
+    while rest.chars().count() > max {
+        let limit = rest.char_indices().nth(max).map_or(rest.len(), |(i, _)| i);
+        let head = &rest[..limit];
+        let after = |i: usize| i + head[i..].chars().next().map_or(1, char::len_utf8);
+        let cut = head
+            .rfind('\n')
+            .or_else(|| head.rfind(['.', '!', '?', '…']))
+            .or_else(|| head.rfind(' '))
+            .map(after)
+            .unwrap_or(limit);
+        out.push(&rest[..cut]);
+        rest = &rest[cut..];
+    }
+    if !rest.is_empty() {
+        out.push(rest);
+    }
+    out
+}
+
 const END_PUNCT: [char; 7] = ['.', '!', '?', ',', ';', ':', '…'];
 
 pub fn dress(src: &str, translated: &str) -> String {
@@ -175,6 +197,18 @@ mod tests {
         assert_eq!(&q[tail_words(q, 1).unwrap()..], "hello'");
         assert_eq!(word_count("a - b"), 2);
         assert_eq!(word_count("кто-то пришёл"), 2);
+    }
+
+    #[test]
+    fn chunks_split_on_boundaries_and_rejoin() {
+        let text = "Первое предложение. Второе предложение!\nТретья строка без точки и ещё слова";
+        for max in [10, 25, 40, 1000] {
+            let parts = chunks(text, max);
+            assert_eq!(parts.concat(), text);
+            assert!(parts.iter().all(|p| p.chars().count() <= max), "{max}: {parts:?}");
+        }
+        assert_eq!(chunks(text, 45)[0], "Первое предложение. Второе предложение!\n");
+        assert_eq!(chunks("", 10), Vec::<&str>::new());
     }
 
     #[test]

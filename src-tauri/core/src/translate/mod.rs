@@ -1,6 +1,9 @@
 pub mod google;
 
-use crate::text::{word_count, Dir};
+use crate::text::{chunks, word_count, Dir};
+
+pub const CHUNK: usize = 1500;
+pub const MAX_TEXT: usize = 20_000;
 use std::collections::{HashMap, VecDeque};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -106,6 +109,27 @@ impl Translator {
             }
         }
         Ok(t)
+    }
+
+    pub fn translate_long(&self, text: &str, dir: Dir, offline: bool) -> Result<Translation, Failure> {
+        if text.chars().count() <= CHUNK {
+            return self.translate(text, dir, offline);
+        }
+        let mut out = String::new();
+        let mut engine = Engine::Gtx;
+        for part in chunks(text, CHUNK) {
+            let core = part.trim();
+            if core.is_empty() {
+                out.push_str(part);
+                continue;
+            }
+            let t = self.translate(core, dir, offline)?;
+            engine = t.engine;
+            out.push_str(&part[..part.len() - part.trim_start().len()]);
+            out.push_str(&t.text);
+            out.push_str(&part[part.trim_end().len()..]);
+        }
+        Ok(Translation { variants: vec![out.clone()], text: out, engine })
     }
 
     pub fn forget(&self) {

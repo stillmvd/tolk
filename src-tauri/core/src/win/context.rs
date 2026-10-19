@@ -27,6 +27,10 @@ static SENDER: OnceLock<Sender<HookEvent>> = OnceLock::new();
 static CURRENT: Mutex<Option<Context>> = Mutex::new(None);
 static LAST_FOREIGN: Mutex<isize> = Mutex::new(0);
 static FOCUS_QUEUED: AtomicBool = AtomicBool::new(false);
+const TERMINAL_HOSTS: [&str; 14] = [
+    "code.exe", "cursor.exe", "windsurf.exe", "idea64.exe", "pycharm64.exe", "webstorm64.exe", "rider64.exe", "clion64.exe",
+    "wezterm-gui.exe", "alacritty.exe", "mintty.exe", "putty.exe", "tabby.exe", "hyper.exe",
+];
 
 thread_local! {
     pub static UIA: Option<IUIAutomation> = unsafe {
@@ -133,7 +137,7 @@ fn compute() -> Context {
         let class = class_name(hwnd);
         Context {
             hwnd: hwnd.0 as isize,
-            console: class == "ConsoleWindowClass" || class == "CASCADIA_HOSTING_WINDOW_CLASS",
+            console: class == "ConsoleWindowClass" || class == "CASCADIA_HOSTING_WINDOW_CLASS" || TERMINAL_HOSTS.contains(&exe.as_str()),
             elevated: elevated(pid),
             password: password(focus),
             own: pid == GetCurrentProcessId(),
