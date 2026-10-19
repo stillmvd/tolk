@@ -36,28 +36,48 @@ export function Translator() {
   const seq = useRef(0);
   const shown = useRef(false);
   const leaving = useRef(0);
+  const closing = useRef(0);
+  const gen = useRef(0);
 
   const playOpen = () => {
     const el = wrap.current;
     if (!el) return;
-    el.classList.remove("opening");
+    gen.current++;
+    clearTimeout(closing.current);
+    closing.current = 0;
+    clearTimeout(leaving.current);
+    leaving.current = 0;
+    el.classList.remove("opening", "closing");
     void el.offsetWidth;
     el.classList.add("live", "opening");
   };
 
   const close = (restore: boolean) => {
+    if (closing.current) return;
     clearTimeout(leaving.current);
     leaving.current = 0;
-    wrap.current?.classList.remove("live", "opening");
-    requestAnimationFrame(() =>
+    const el = wrap.current;
+    el?.classList.remove("opening");
+    el?.classList.add("closing");
+    const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const g = gen.current;
+    closing.current = window.setTimeout(() => {
+      if (g !== gen.current) return;
+      el?.classList.remove("live", "closing");
       requestAnimationFrame(() =>
-        invoke("hide_translator", { restore }).then(() => {
-          setText("");
-          setFlip(false);
-          setBurst(null);
+        requestAnimationFrame(() => {
+          if (g !== gen.current) return;
+          invoke("hide_translator", { restore })
+            .then(() => {
+              if (g !== gen.current) return;
+              setText("");
+              setFlip(false);
+              setBurst(null);
+            })
+            .finally(() => g === gen.current && (closing.current = 0));
         }),
-      ),
-    );
+      );
+    }, still ? 0 : 220);
   };
 
   useEffect(() => {
@@ -136,7 +156,7 @@ export function Translator() {
   const variants = view.kind === "done" ? view.out.variants.filter((v) => v !== result) : [];
 
   const copy = async (value: string, el: HTMLElement | null) => {
-    if (!value || stale || leaving.current) return;
+    if (!value || stale || leaving.current || closing.current) return;
     leaving.current = window.setTimeout(() => close(true), 650);
     await invoke("copy_text", { text: value });
     if (view.kind === "done") invoke("remember", { src: text, dst: value, from: view.out.from, to: view.out.to });
