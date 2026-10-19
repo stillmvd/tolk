@@ -3,8 +3,8 @@ use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, WebviewUrl, WebviewWindowBuilder};
 use tolk_core::config::{parse_hotkey, Config, Mode, MOD_ALT, MOD_CTRL, MOD_SHIFT, MOD_WIN};
 use tolk_core::engine::Rect;
-use tolk_core::text::{direction, dress, word_count};
-use tolk_core::translate::MAX_TEXT;
+use tolk_core::text::{direction, dress, dress_variants, word_count};
+use tolk_core::translate::{models, MAX_TEXT};
 use tolk_core::win::{context, hook};
 use windows::core::{w, PWSTR};
 use windows::Win32::Foundation::{ERROR_FILE_NOT_FOUND, HWND, POINT};
@@ -15,6 +15,8 @@ use windows::Win32::UI::WindowsAndMessaging::{GetCursorPos, SetForegroundWindow}
 
 static FILL: Mutex<Option<String>> = Mutex::new(None);
 static BUILDING: AtomicBool = AtomicBool::new(false);
+static DOWNLOADING: AtomicBool = AtomicBool::new(false);
+static CANCEL: AtomicBool = AtomicBool::new(false);
 pub static RECORDING: AtomicBool = AtomicBool::new(false);
 
 static ANCHOR: Mutex<Option<Anchor>> = Mutex::new(None);
@@ -184,7 +186,7 @@ pub async fn translate_text(text: String, flip: bool) -> Result<Option<Translate
     let src = core.clone();
     let got = tauri::async_runtime::spawn_blocking(move || translator.translate_long(&src, dir, offline)).await.map_err(|e| e.to_string())?;
     let t = got.map_err(|f| f.message().to_string())?;
-    let variants = if word_count(&core) == 1 { t.variants.iter().map(|v| dress(&core, v)).collect() } else { Vec::new() };
+    let variants = if word_count(&core) == 1 { dress_variants(&core, &t.variants) } else { Vec::new() };
     Ok(Some(Translated { text: dress(&core, &t.text), variants, from: dir.from().code(), to: dir.to().code() }))
 }
 
@@ -280,6 +282,77 @@ fn autostart(on: bool) -> Result<(), String> {
             Ok(())
         }
     }
+}
+
+#[derive(serde::Serialize, Clone)]
+pub struct ModelState {
+    ready: bool,
+    busy: bool,
+    done: u64,
+    total: u64,
+}
+
+fn model_state(done: u64) -> ModelState {
+    ModelState { ready: models::ready(), busy: DOWNLOADING.load(SeqCst), done, total: models::total() }
+}
+
+#[tauri::command]
+pub fn model_status() -> ModelState {
+    model_state(0)
+}
+
+#[tauri::command]
+pub fn download_model(app: AppHandle) {
+    if DOWNLOADING.swap(true, SeqCst) {
+        return;
+    }
+    CANCEL.store(false, SeqCst);
+    std::thread::spawn(move || {
+        let step = models::total() / 200;
+        let mut last = 0;
+        let got = {
+            let _busy = Downloading;
+            models::download(&CANCEL, |done, total| {
+                if done - last >= step || done == total {
+                    last = done;
+                    let _ = app.emit("model:progress", model_state(done));
+                }
+            })
+        };
+        let error = got.err().filter(|e| *e != models::Fail::Cancelled).map(|e| e.message());
+        let _ = app.emit("model:done", error);
+        let _ = app.emit("model:progress", model_state(0));
+    });
+}
+
+#[tauri::command]
+pub fn cancel_download() {
+    CANCEL.store(true, SeqCst);
+}
+
+struct Downloading;
+
+impl Drop for Downloading {
+    fn drop(&mut self) {
+        DOWNLOADING.store(false, SeqCst);
+    }
+}
+
+#[tauri::command]
+pub async fn delete_model(app: AppHandle) -> Result<(), String> {
+    if DOWNLOADING.load(SeqCst) {
+        return Err("Сначала отмени скачивание".into());
+    }
+    let removed = tauri::async_runtime::spawn_blocking(|| {
+        let translator = &crate::engine().translator;
+        let r = translator.sidecar.without(models::remove);
+        translator.forget();
+        r
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+    let _ = app.emit("model:progress", model_state(0));
+    removed.map_err(|_| "Не получилось удалить модель — закрой Tolk и удали папку вручную".to_string())
 }
 
 pub fn emit_config(app: &AppHandle, cfg: &Config) {

@@ -336,7 +336,7 @@ impl Worker {
         self.buffer.set(ctx.hwnd, format!("{}{}", &before[..start], dressed));
         self.emit(CoreEvent::Translated { from: fragment.to_string(), to: dressed.clone(), dir });
         let original = fragment.to_string();
-        let variants: Vec<String> = if words == 1 { t.variants.iter().map(|v| dress(fragment, v)).collect() } else { Vec::new() };
+        let variants: Vec<String> = if words == 1 { crate::text::dress_variants(fragment, &t.variants) } else { Vec::new() };
         self.done = Some(Done { hwnd: ctx.hwnd, seq, at: Instant::now(), inserted: dressed, original, layout, typed: Some(Typed { before, start, words }), variants });
         if lang::current() != Some(dir.to()) {
             lang::switch(dir.to());
@@ -373,7 +373,7 @@ impl Worker {
         }
         self.buffer.reset();
         self.emit(CoreEvent::Translated { from: text.clone(), to: dressed.clone(), dir });
-        let variants: Vec<String> = if crate::text::word_count(&text) == 1 { t.variants.iter().map(|v| dress(&text, v)).collect() } else { Vec::new() };
+        let variants: Vec<String> = if crate::text::word_count(&text) == 1 { crate::text::dress_variants(&text, &t.variants) } else { Vec::new() };
         self.done = Some(Done { hwnd: ctx.hwnd, seq, at: Instant::now(), inserted: dressed, original: text, layout: None, typed: None, variants });
         self.show_variants(0);
     }

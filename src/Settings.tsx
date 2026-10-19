@@ -15,6 +15,7 @@ type Config = {
   history: boolean;
   repeat_ms: number;
 };
+type Model = { ready: boolean; busy: boolean; done: number; total: number };
 type HkKey = "hotkey" | "area_hotkey" | "window_hotkey";
 type Section = "keys" | "mode" | "ex" | "gen";
 
@@ -33,6 +34,8 @@ const GHBDTN = ["Pause", "Shift+Pause"];
 const MODIFIERS = ["ControlLeft", "ControlRight", "AltLeft", "AltRight", "ShiftLeft", "ShiftRight", "MetaLeft", "MetaRight"];
 const SPECIAL: Record<string, string> = { Pause: "Pause", Insert: "Insert", Space: "Space", Backquote: "`" };
 
+const mb = (bytes: number) => Math.round(bytes / 1_048_576);
+
 function keyName(code: string): string | null {
   if (/^Key[A-Z]$/.test(code)) return code.slice(3);
   if (/^Digit\d$/.test(code)) return code.slice(5);
@@ -47,13 +50,28 @@ export function Settings() {
   const [rec, setRec] = useState<HkKey | null>(null);
   const [msg, setMsg] = useState<{ key: string; text: string; err: boolean } | null>(null);
 
+  const [model, setModel] = useState<Model | null>(null);
+
   useEffect(() => {
     invoke<Config>("get_config").then(setCfg);
-    const off = listen<Config>("config:changed", (e) => setCfg(e.payload));
+    invoke<Model>("model_status").then(setModel);
+    const off = [
+      listen<Config>("config:changed", (e) => setCfg(e.payload)),
+      listen<Model>("model:progress", (e) => setModel(e.payload)),
+      listen<string | null>("model:done", (e) => e.payload && setMsg({ key: "model", text: e.payload, err: true })),
+    ];
     return () => {
-      off.then((f) => f());
+      off.forEach((p) => p.then((f) => f()));
     };
   }, []);
+
+  const removeModel = async () => {
+    try {
+      await invoke("delete_model");
+    } catch (e) {
+      setMsg({ key: "model", text: String(e), err: true });
+    }
+  };
 
   const latest = useRef<Config | null>(null);
   latest.current = cfg;
@@ -188,13 +206,34 @@ export function Settings() {
               <div className="t-setrow tk-btnrow">
                 <div className="tx">
                   <b>Офлайн-модель</b>
-                  <span>≈ 300 МБ, русский и английский</span>
+                  {model?.busy ? (
+                    <>
+                      <div className="t-progress tk-prog">
+                        <i style={{ width: `${(model.done / model.total) * 100}%` }} />
+                      </div>
+                      <span>
+                        {mb(model.done)} из {mb(model.total)} МБ
+                      </span>
+                    </>
+                  ) : (
+                    <span>{model?.ready ? `Скачана · ${mb(model.total)} МБ — переводит без сети` : `≈ ${mb(model?.total ?? 0)} МБ, русский и английский`}</span>
+                  )}
                 </div>
-                {/* TODO: фаза 11 — скачивание модели с прогрессом */}
-                <button type="button" className="t-btn s32" disabled>
-                  Скачать
-                </button>
+                {model?.busy ? (
+                  <button type="button" className="t-btn s32" onClick={() => invoke("cancel_download")}>
+                    Отменить
+                  </button>
+                ) : model?.ready ? (
+                  <button type="button" className="t-btn s32" onClick={removeModel}>
+                    Удалить
+                  </button>
+                ) : (
+                  <button type="button" className="t-btn s32" disabled={!model} onClick={() => (setMsg(null), invoke("download_model"))}>
+                    Скачать
+                  </button>
+                )}
               </div>
+              {note("model")}
               {note("mode")}
             </>
           )}

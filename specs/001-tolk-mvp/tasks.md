@@ -85,9 +85,9 @@
 
 ## Phase 11: Офлайн
 
-- [ ] T035 CMake, крейт `mt` (ct2rs), протокол `contracts/mt-protocol.md`, сборка sidecar в бандл
-- [ ] T036 Скачивание моделей с прогрессом и SHA-256, удаление; `model_status`
-- [ ] T037 Клиент sidecar в цепочке перевода, режим «только офлайн»
+- [x] T035 CMake, крейт `mt` (ct2rs), протокол `contracts/mt-protocol.md`, сборка sidecar в бандл
+- [x] T036 Скачивание моделей с прогрессом и SHA-256, удаление; `model_status`
+- [x] T037 Клиент sidecar в цепочке перевода, режим «только офлайн»
 
 ## Phase 12: Polish
 

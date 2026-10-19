@@ -1,4 +1,6 @@
 pub mod google;
+pub mod models;
+pub mod offline;
 
 use crate::text::{chunks, word_count, Dir};
 
@@ -50,12 +52,13 @@ pub struct Translator {
     agent: ureq::Agent,
     cache: Mutex<(HashMap<Key, Translation>, VecDeque<Key>)>,
     last: Mutex<Option<Instant>>,
+    pub sidecar: offline::Sidecar,
 }
 
 impl Default for Translator {
     fn default() -> Self {
         let agent = ureq::Agent::config_builder().http_status_as_error(false).user_agent(UA).build().into();
-        Translator { agent, cache: Mutex::new((HashMap::new(), VecDeque::new())), last: Mutex::new(None) }
+        Translator { agent, cache: Mutex::new((HashMap::new(), VecDeque::new())), last: Mutex::new(None), sidecar: offline::Sidecar::default() }
     }
 }
 
@@ -72,7 +75,7 @@ impl Translator {
             return Ok(t.clone());
         }
         if offline {
-            return Err(Failure::NoModel);
+            return self.local(key, text, dir);
         }
         let single = word_count(text) == 1;
         let mut net_down = true;
@@ -98,7 +101,23 @@ impl Translator {
                 Got::Net => {}
             }
         }
-        let t = found.ok_or(if net_down { Failure::NoNetwork } else { Failure::Service })?;
+        let Some(t) = found else {
+            let fail = if net_down { Failure::NoNetwork } else { Failure::Service };
+            return if models::ready() { self.local(key, text, dir).map_err(|_| fail) } else { Err(fail) };
+        };
+        self.remember(key, &t);
+        Ok(t)
+    }
+
+    fn local(&self, key: Key, text: &str, dir: Dir) -> Result<Translation, Failure> {
+        let single = word_count(text) == 1;
+        let (main, variants) = self.sidecar.translate(text, dir, if single { 3 } else { 1 })?;
+        let t = Translation { text: main, variants: if single { variants } else { Vec::new() }, engine: Engine::Offline };
+        self.remember(key, &t);
+        Ok(t)
+    }
+
+    fn remember(&self, key: Key, t: &Translation) {
         let mut cache = self.cache.lock().unwrap();
         if cache.0.insert(key.clone(), t.clone()).is_none() {
             cache.1.push_back(key);
@@ -108,7 +127,6 @@ impl Translator {
                 }
             }
         }
-        Ok(t)
     }
 
     pub fn translate_long(&self, text: &str, dir: Dir, offline: bool) -> Result<Translation, Failure> {

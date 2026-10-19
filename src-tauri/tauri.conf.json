@@ -4,9 +4,9 @@
   "version": "../package.json",
   "identifier": "com.stillmvd.tolk",
   "build": {
-    "beforeDevCommand": "pnpm dev",
+    "beforeDevCommand": "node scripts/mt.mjs && pnpm dev",
     "devUrl": "http://localhost:1440",
-    "beforeBuildCommand": "pnpm build",
+    "beforeBuildCommand": "node scripts/mt.mjs && pnpm build",
     "frontendDist": "../dist"
   },
   "app": {
@@ -17,13 +17,20 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis"],
-    "icon": ["icons/icon.ico"],
+    "targets": [
+      "nsis"
+    ],
+    "icon": [
+      "icons/icon.ico"
+    ],
     "windows": {
       "nsis": {
         "installMode": "perMachine",
         "installerIcon": "icons/icon.ico"
       }
-    }
+    },
+    "externalBin": [
+      "binaries/tolk-mt"
+    ]
   }
 }

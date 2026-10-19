@@ -14,3 +14,4 @@ HANDOFF.md
 __pycache__/
 .planning/
 desktop.ini
+src-tauri/binaries/

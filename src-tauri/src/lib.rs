@@ -131,6 +131,10 @@ pub fn run() {
             ui::set_recording,
             ui::hotkey_free,
             ui::pick_program,
+            ui::model_status,
+            ui::download_model,
+            ui::cancel_download,
+            ui::delete_model,
         ])
         .setup(|app| {
             let (tx, rx) = crossbeam_channel::unbounded();

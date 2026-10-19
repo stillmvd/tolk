@@ -122,6 +122,7 @@ body { font-variant-numeric: tabular-nums; }
 .t-setrow .t-btn:not(.p):not(.g) { background: var(--cosmic); }
 .t-setrow .t-btn:not(.p):not(.g):hover { background: var(--hover-strong); }
 .tk-btnrow { padding-right: 10px; }
+.tk-prog { width: 220px; margin: 6px 0 2px; background: var(--hover-strong); }
 .tk-segrow { padding-right: 6px; }
 .tk-segrow .t-seg { background: var(--ground); }
 .tk-hk { font-size: 13px; font-weight: 700; white-space: nowrap; }

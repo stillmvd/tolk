@@ -172,9 +172,28 @@ pub fn dress(src: &str, translated: &str) -> String {
     format!("{lead}{out}{trail}")
 }
 
+pub fn dress_variants(src: &str, variants: &[String]) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for v in variants.iter().map(|v| dress(src, v)) {
+        if !out.contains(&v) {
+            out.push(v);
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn variants_are_unique_after_dressing() {
+        let v = ["Привет".to_string(), "привет".to_string(), "Привет!".to_string()];
+        let got = dress_variants("Hello", &v);
+        let unique: std::collections::HashSet<_> = got.iter().collect();
+        assert_eq!(unique.len(), got.len());
+        assert!(got.len() < v.len());
+    }
 
     #[test]
     fn picks_direction_by_majority() {
