@@ -13,17 +13,17 @@
 
 ## Phase 2: Foundational
 
-- [ ] T005 [P] `core/src/text.rs`: направление по алфавиту, разбиение на слова, перенос регистра первой буквы и
+- [x] T005 [P] `core/src/text.rs`: направление по алфавиту, разбиение на слова, перенос регистра первой буквы и
   конечной пунктуации; тесты
-- [ ] T006 [P] `core/src/translate/google.rs`: URL gtx/clients5, разбор `[0]` сегментов, `[1]` словаря и `[5]`
+- [x] T006 [P] `core/src/translate/google.rs`: URL gtx/clients5, разбор `[0]` сегментов, `[1]` словаря и `[5]`
   альтернатив → `Translation`; тесты на сохранённых ответах (`core/tests/data/*.json`)
-- [ ] T007 `core/src/translate/mod.rs`: цепочка с таймаутами, кэш LRU, ограничение частоты; ureq
-- [ ] T008 `core/src/config.rs`: `Config` (data-model), загрузка/сохранение, разбор хоткея `Alt+Q`
-- [ ] T009 `core/src/win/`: перенос из Ghbdtn и упрощение — `hook.rs` (поток, переустановка, метка `TOLK`),
+- [x] T007 `core/src/translate/mod.rs`: цепочка с таймаутами, кэш LRU, ограничение частоты; ureq
+- [x] T008 `core/src/config.rs`: `Config` (data-model), загрузка/сохранение, разбор хоткея `Alt+Q`
+- [x] T009 `core/src/win/`: перенос из Ghbdtn и упрощение — `hook.rs` (поток, переустановка, метка `TOLK`),
   `keys.rs` (SendInput Unicode, Backspace×N, комбинации, `VK 0xE8`), `clipboard.rs` (снимок всех форматов,
   восстановление, свои форматы-исключения из истории), `lang.rs` (текущая раскладка, переключение ru/en),
   `context.rs` (exe окна, пароль, повышенные права)
-- [ ] T010 `core/src/engine.rs`: рабочий поток, канал событий хука, счётчик `hook_seq`, атомарные флаги
+- [x] T010 `core/src/engine.rs`: рабочий поток, канал событий хука, счётчик `hook_seq`, атомарные флаги
 
 ## Phase 3: US1 — перевод набранного слова (P1) 🎯 MVP
 
