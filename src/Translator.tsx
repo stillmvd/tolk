@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
@@ -7,7 +7,18 @@ import { Icon } from "./Icon";
 type Out = { text: string; variants: string[]; from: string; to: string };
 type View = { kind: "idle" } | { kind: "done"; out: Out } | { kind: "err"; msg: string };
 
-const guess = (t: string) => (/[а-яё]/i.test(t) || !/[a-z]/i.test(t) ? "ru" : "en");
+type Spark = { dx: number; dy: number; s: number; d: number; c: string };
+type Burst = { id: number; x: number; y: number; parts: Spark[] };
+
+const TINTS = ["#fff", "var(--tk)", "#fff", "color-mix(in srgb, var(--tk) 45%, white)"];
+const sparks = (): Spark[] =>
+  Array.from({ length: 18 }, (_, i) => {
+    const a = (i / 18) * Math.PI * 2 + (Math.random() - 0.5) * 0.5;
+    const r = 34 + Math.random() * 46;
+    return { dx: Math.cos(a) * r, dy: Math.sin(a) * r, s: 6 + Math.random() * 8, d: Math.random() * 70, c: TINTS[i % 4] };
+  });
+
+const guess =(t: string) => (/[а-яё]/i.test(t) || !/[a-z]/i.test(t) ? "ru" : "en");
 const other = (l: string) => (l === "ru" ? "en" : "ru");
 
 export function Translator() {
@@ -15,14 +26,16 @@ export function Translator() {
   const [text, setText] = useState("");
   const [flip, setFlip] = useState(false);
   const [view, setView] = useState<View>({ kind: "idle" });
-  const [pick, setPick] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [stale, setStale] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [burst, setBurst] = useState<Burst | null>(null);
   const input = useRef<HTMLInputElement>(null);
   const wrap = useRef<HTMLDivElement>(null);
+  const btn = useRef<HTMLButtonElement>(null);
   const seq = useRef(0);
   const shown = useRef(false);
+  const leaving = useRef(0);
 
   const playOpen = () => {
     const el = wrap.current;
@@ -33,12 +46,15 @@ export function Translator() {
   };
 
   const close = (restore: boolean) => {
+    clearTimeout(leaving.current);
+    leaving.current = 0;
     wrap.current?.classList.remove("live", "opening");
     requestAnimationFrame(() =>
       requestAnimationFrame(() =>
         invoke("hide_translator", { restore }).then(() => {
           setText("");
           setFlip(false);
+          setBurst(null);
         }),
       ),
     );
@@ -73,7 +89,6 @@ export function Translator() {
   useEffect(() => {
     const id = ++seq.current;
     setCopied(false);
-    setPick(null);
     if (!text.trim()) {
       setView({ kind: "idle" });
       setFlip(false);
@@ -113,17 +128,21 @@ export function Translator() {
       await win.setFocus();
       input.current?.focus();
     });
-  }, [view, pick, copied]);
+  }, [view, copied]);
 
   const from = view.kind === "done" ? view.out.from : flip ? other(guess(text)) : guess(text);
-  const result = view.kind === "done" ? pick ?? view.out.text : "";
+  const result = view.kind === "done" ? view.out.text : "";
   const word = view.kind === "done" && view.out.variants.length > 0;
   const variants = view.kind === "done" ? view.out.variants.filter((v) => v !== result) : [];
 
-  const copy = async () => {
-    if (!result || stale) return;
-    await invoke("copy_text", { text: result });
+  const copy = async (value: string, el: HTMLElement | null) => {
+    if (!value || stale || leaving.current) return;
+    leaving.current = window.setTimeout(() => close(true), 650);
+    await invoke("copy_text", { text: value });
     setCopied(true);
+    const box = wrap.current?.getBoundingClientRect();
+    const at = el?.getBoundingClientRect();
+    if (box && at) setBurst({ id: Date.now(), x: at.left + at.width / 2 - box.left, y: at.top + at.height / 2 - box.top, parts: sparks() });
   };
 
   const words = result.split(/(\s+)/).map((w, i) => (
@@ -146,7 +165,7 @@ export function Translator() {
             ref={input}
             value={text}
             onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && copy()}
+            onKeyDown={(e) => e.key === "Enter" && copy(result, btn.current)}
             placeholder="Введи или вставь текст"
             spellCheck={false}
             autoFocus
@@ -169,13 +188,13 @@ export function Translator() {
               )}
               {view.kind === "done" && (
                 <>
-                  <p className={word ? "tk-main" : "tk-phr"} key={`m-${result}`} onClick={copy}>
+                  <p className={word ? "tk-main" : "tk-phr"} key={`m-${result}`} onClick={(e) => copy(result, e.currentTarget)}>
                     {words}
                   </p>
                   {variants.length > 0 && (
                     <div className="tk-vs" key={`v-${result}`}>
                       {variants.map((v, i) => (
-                        <button type="button" key={v} className="t-chip" style={{ animationDelay: `${180 + i * 50}ms` }} onClick={() => (setPick(v), setCopied(false))}>
+                        <button type="button" key={v} className="t-chip" style={{ animationDelay: `${180 + i * 50}ms` }} onClick={(e) => copy(v, e.currentTarget)}>
                           {v}
                         </button>
                       ))}
@@ -186,7 +205,7 @@ export function Translator() {
             </div>
             {view.kind === "done" && (
               <div className="ft">
-                <button type="button" className="t-btn s32 p busy-able" data-state={copied ? "done" : "idle"} onClick={copy}>
+                <button type="button" className="t-btn s32 p busy-able" data-state={copied ? "done" : "idle"} ref={btn} onClick={(e) => copy(result, e.currentTarget)}>
                   <span className="s-idle">
                     <Icon name="copy" />
                     Скопировать
@@ -202,6 +221,13 @@ export function Translator() {
         )}
         </div>
       </div>
+      {burst && (
+        <div className="tk-sparks" key={burst.id} style={{ left: burst.x, top: burst.y }} aria-hidden="true">
+          {burst.parts.map((p, i) => (
+            <i key={i} style={{ "--dx": `${p.dx}px`, "--dy": `${p.dy}px`, "--s": `${p.s}px`, "--c": p.c, animationDelay: `${p.d}ms` } as CSSProperties} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
