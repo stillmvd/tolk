@@ -34,7 +34,14 @@ export function Translator() {
 
   const close = (restore: boolean) => {
     wrap.current?.classList.remove("live", "opening");
-    requestAnimationFrame(() => requestAnimationFrame(() => invoke("hide_translator", { restore })));
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() =>
+        invoke("hide_translator", { restore }).then(() => {
+          setText("");
+          setFlip(false);
+        }),
+      ),
+    );
   };
 
   useEffect(() => {
