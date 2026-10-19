@@ -183,12 +183,11 @@ impl Family {
 struct Fonts {
     med13: *mut GpFont,
     bold13: *mut GpFont,
-    bold11: *mut GpFont,
 }
 
 impl Fonts {
     unsafe fn new(med: &Family, bold: &Family, k: f32) -> Option<Self> {
-        Some(Fonts { med13: med.font(13.0 * k)?, bold13: bold.font(13.0 * k)?, bold11: bold.font(11.0 * k)? })
+        Some(Fonts { med13: med.font(13.0 * k)?, bold13: bold.font(13.0 * k)? })
     }
 }
 
@@ -197,7 +196,6 @@ impl Drop for Fonts {
         unsafe {
             GdipDeleteFont(self.med13);
             GdipDeleteFont(self.bold13);
-            GdipDeleteFont(self.bold11);
         }
     }
 }
@@ -205,13 +203,11 @@ impl Drop for Fonts {
 struct Item {
     x: f32,
     w: f32,
-    num: Vec<u16>,
-    nw: f32,
     word: Vec<u16>,
 }
 
 enum Kind {
-    Variants { label: Vec<(Vec<u16>, f32)>, items: Vec<Item>, seps: Vec<f32>, sep: Vec<u16>, current: usize },
+    Variants { items: Vec<Item>, seps: Vec<f32>, sep: Vec<u16>, current: usize },
     Waiting,
     Notice { text: Vec<u16>, error: bool },
 }
@@ -492,15 +488,7 @@ impl State {
                 let fonts = Fonts::new(&self.med, &self.bold, k)?;
                 let pad = (52.0 * k).ceil();
                 let ph = 36.0 * k;
-                let mut x = pad + 14.0 * k;
-                let mut label = Vec::new();
-                for ch in "Alt+".chars() {
-                    let s = utf16(&ch.to_string());
-                    let cw = self.width(fonts.bold11, &s);
-                    label.push((s, x));
-                    x += cw + 0.22 * k;
-                }
-                x += 6.0 * k + 2.0 * k;
+                let mut x = pad + 6.0 * k;
                 let sep = utf16("\u{b7}");
                 let sw = self.width(fonts.med13, &sep);
                 let mut items = Vec::new();
@@ -511,18 +499,16 @@ impl State {
                         seps.push(x);
                         x += sw + 2.0 * k;
                     }
-                    let num = utf16(&(i + 1).to_string());
                     let word = utf16(word);
-                    let nw = self.width(fonts.bold13, &num);
                     let ww = self.width(if i == current { fonts.bold13 } else { fonts.med13 }, &word);
-                    let w = 8.0 * k + nw + 5.0 * k + ww + 8.0 * k;
-                    items.push(Item { x, w, num, nw, word });
+                    let w = 10.0 * k + ww + 10.0 * k;
+                    items.push(Item { x, w, word });
                     x += w;
                 }
                 let pw = x + 6.0 * k - pad;
                 let (sx, sy) = place_above(a, k, pw, ph, &work);
                 Some(Shown {
-                    kind: Kind::Variants { label, items, seps, sep, current },
+                    kind: Kind::Variants { items, seps, sep, current },
                     start,
                     expire: Some(VARIANTS_FOR),
                     k,
@@ -664,11 +650,8 @@ impl Shown {
                     cv.dot(argb(t.tk, o), cx, py + 3.0 * k, 3.0 * k * sc);
                 }
             }
-            Kind::Variants { label, items, seps, sep, current } => {
+            Kind::Variants { items, seps, sep, current } => {
                 cv.frame(t, px, py, pw, ph, k);
-                for (s, x) in label {
-                    cv.text(f.bold11, s, argb(t.dim, 1.0), *x, py, ph);
-                }
                 for x in seps {
                     cv.text(f.med13, sep, argb(t.strong, 1.0), *x, py, ph);
                 }
@@ -680,9 +663,8 @@ impl Shown {
                     } else if hover == Some(i) {
                         cv.round(argb(t.strong, 1.0), it.x, iy, it.w, ih, ih / 2.0);
                     }
-                    let (nc, wc, wf) = if cur { (argb(t.ink, 0.7), argb(t.ink, 1.0), f.bold13) } else { (argb(t.dim, 1.0), argb(t.fg, 1.0), f.med13) };
-                    cv.text(f.bold13, &it.num, nc, it.x + 8.0 * k, iy, ih);
-                    cv.text(wf, &it.word, wc, it.x + 8.0 * k + it.nw + 5.0 * k, iy, ih);
+                    let (wc, wf) = if cur { (argb(t.ink, 1.0), f.bold13) } else { (argb(t.fg, 1.0), f.med13) };
+                    cv.text(wf, &it.word, wc, it.x + 10.0 * k, iy, ih);
                 }
             }
             Kind::Notice { text, error } => {

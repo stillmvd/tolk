@@ -406,7 +406,6 @@ impl Worker {
     }
 
     fn pick(&mut self, n: usize) {
-        keys::suppress_menu();
         let seq = hook::SEQ.load(SeqCst);
         let Some(d) = self.done.as_mut().filter(|d| d.seq == seq) else {
             return self.hide_hint();

@@ -128,7 +128,7 @@ fn main() {
         return;
     }
     let (tx, rx) = crossbeam_channel::unbounded();
-    let _engine = Engine::start(Config { repeat_ms: 3000, ..Config::default() }, tx);
+    let engine = Engine::start(Config { repeat_ms: 3000, ..Config::default() }, tx);
     std::thread::spawn(move || {
         for ev in rx {
             if !matches!(ev, CoreEvent::Translated { .. }) {
@@ -155,9 +155,9 @@ fn main() {
     chord(VK_LMENU, VIRTUAL_KEY(b'Q' as u16));
     check("слово ru→en", wait_text(edit, "lock", Duration::from_secs(3)), "lock");
     std::thread::sleep(Duration::from_millis(300));
-    chord(VK_LMENU, VIRTUAL_KEY(b'2' as u16));
-    check("вариант Alt+2", wait_text(edit, "castle", Duration::from_secs(2)), "castle");
-    chord(VK_LMENU, VIRTUAL_KEY(b'2' as u16));
+    engine.pick(2);
+    check("вариант кликом", wait_text(edit, "castle", Duration::from_secs(2)), "castle");
+    engine.pick(2);
     std::thread::sleep(Duration::from_millis(200));
     chord(VK_LCONTROL, VIRTUAL_KEY(b'Z' as u16));
     check("Ctrl+Z", wait_text(edit, "замок", Duration::from_secs(2)), "замок");

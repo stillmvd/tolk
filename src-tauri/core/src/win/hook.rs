@@ -101,13 +101,9 @@ fn hotkey_matches(code: u32, k: &RawKey) -> bool {
         && (code & MOD_WIN != 0) == k.win
 }
 
-pub fn decide(k: &RawKey, enabled: bool, blocked: bool, armed: bool, hint: bool) -> Option<HookEvent> {
-    let plain = !k.shift && !k.win;
-    if armed && k.vk == VK_Z.0 && k.ctrl && !k.alt && plain {
+pub fn decide(k: &RawKey, enabled: bool, blocked: bool, armed: bool) -> Option<HookEvent> {
+    if armed && k.vk == VK_Z.0 && k.ctrl && !k.alt && !k.shift && !k.win {
         return Some(HookEvent::Undo);
-    }
-    if hint && k.alt && !k.ctrl && plain && (b'1' as u16..=b'5' as u16).contains(&k.vk) {
-        return Some(HookEvent::Pick((k.vk - b'0' as u16) as u8));
     }
     if !enabled {
         return None;
@@ -160,7 +156,7 @@ fn on_key(kb: &KBDLLHOOKSTRUCT) -> bool {
         caps: unsafe { GetKeyState(VK_CAPITAL.0 as i32) } & 1 != 0,
         unicode: (vk == VK_PACKET.0).then_some(kb.scanCode as u16),
     };
-    if let Some(ev) = decide(&k, ENABLED.load(SeqCst), BLOCKED.load(SeqCst), ARMED_UNDO.load(SeqCst), HINT_OPEN.load(SeqCst)) {
+    if let Some(ev) = decide(&k, ENABLED.load(SeqCst), BLOCKED.load(SeqCst), ARMED_UNDO.load(SeqCst)) {
         if ev != HookEvent::Undo {
             ARMED_UNDO.store(false, SeqCst);
         }
@@ -319,14 +315,12 @@ mod tests {
         HK_TRANSLATE.store(MOD_ALT | b'Q' as u32, SeqCst);
         HK_AREA.store(MOD_ALT | MOD_SHIFT | b'Q' as u32, SeqCst);
         let alt_q = key(b'Q', false, true, false);
-        assert_eq!(decide(&alt_q, true, false, false, false), Some(HookEvent::Translate));
-        assert_eq!(decide(&alt_q, true, true, false, false), None);
-        assert_eq!(decide(&alt_q, false, false, false, false), None);
-        assert_eq!(decide(&key(b'Q', false, true, true), true, false, false, false), Some(HookEvent::Area));
-        assert_eq!(decide(&key(b'Z', true, false, false), true, false, true, false), Some(HookEvent::Undo));
-        assert_eq!(decide(&key(b'Z', true, false, false), true, false, false, false), None);
-        assert_eq!(decide(&key(b'2', false, true, false), true, false, false, true), Some(HookEvent::Pick(2)));
-        assert_eq!(decide(&key(b'2', false, false, false), true, false, false, true), None);
-        assert_eq!(decide(&key(b'6', false, true, false), true, false, false, true), None);
+        assert_eq!(decide(&alt_q, true, false, false), Some(HookEvent::Translate));
+        assert_eq!(decide(&alt_q, true, true, false), None);
+        assert_eq!(decide(&alt_q, false, false, false), None);
+        assert_eq!(decide(&key(b'Q', false, true, true), true, false, false), Some(HookEvent::Area));
+        assert_eq!(decide(&key(b'Z', true, false, false), true, false, true), Some(HookEvent::Undo));
+        assert_eq!(decide(&key(b'Z', true, false, false), true, false, false), None);
+        assert_eq!(decide(&key(b'2', false, true, false), true, false, false), None);
     }
 }
