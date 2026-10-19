@@ -146,17 +146,27 @@ fn compute() -> Context {
     }
 }
 
+fn remember(hwnd: HWND) {
+    let shell = ["Shell_TrayWnd", "Shell_SecondaryTrayWnd", "NotifyIconOverflowWindow", "TopLevelWindowForOverflowXamlIsland"];
+    let mut pid = 0;
+    unsafe { GetWindowThreadProcessId(hwnd, Some(&mut pid)) };
+    if !hwnd.is_invalid() && pid != unsafe { GetCurrentProcessId() } && !shell.contains(&class_name(hwnd).as_str()) {
+        *LAST_FOREIGN.lock().unwrap() = hwnd.0 as isize;
+    }
+}
+
 pub fn refresh() -> Context {
     let ctx = compute();
-    if !ctx.own && ctx.hwnd != 0 && class_name(HWND(ctx.hwnd as *mut _)) != "Shell_TrayWnd" {
-        *LAST_FOREIGN.lock().unwrap() = ctx.hwnd;
-    }
+    remember(HWND(ctx.hwnd as *mut _));
     *CURRENT.lock().unwrap() = Some(ctx.clone());
     ctx
 }
 
-unsafe extern "system" fn on_event(_: HWINEVENTHOOK, _: u32, _: HWND, _: i32, _: i32, _: u32, _: u32) {
+unsafe extern "system" fn on_event(_: HWINEVENTHOOK, event: u32, hwnd: HWND, _: i32, _: i32, _: u32, _: u32) {
     let _ = std::panic::catch_unwind(|| {
+        if event == EVENT_SYSTEM_FOREGROUND {
+            remember(hwnd);
+        }
         refresh();
         if !FOCUS_QUEUED.swap(true, SeqCst) {
             if let Some(tx) = SENDER.get() {

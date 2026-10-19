@@ -32,6 +32,7 @@ pub struct RawKey {
 pub enum HookEvent {
     Key(RawKey),
     Translate,
+    TranslateNow,
     Area,
     Window,
     Undo,

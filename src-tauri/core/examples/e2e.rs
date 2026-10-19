@@ -12,6 +12,12 @@ unsafe extern "system" fn proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPA
     if msg == WM_DESTROY {
         PostQuitMessage(0);
     }
+    if msg == WM_SETFOCUS {
+        if let Ok(edit) = FindWindowExW(Some(hwnd), None, w!("EDIT"), None) {
+            let _ = SetFocus(Some(edit));
+        }
+        return LRESULT(0);
+    }
     DefWindowProcW(hwnd, msg, wparam, lparam)
 }
 
@@ -56,6 +62,11 @@ fn type_text(text: &str) {
 fn chord(m: VIRTUAL_KEY, k: VIRTUAL_KEY) {
     let scan = |vk: VIRTUAL_KEY| unsafe { MapVirtualKeyW(vk.0 as u32, MAPVK_VK_TO_VSC) } as u16;
     send(&[input(m, scan(m), KEYBD_EVENT_FLAGS(0)), input(k, scan(k), KEYBD_EVENT_FLAGS(0)), input(k, scan(k), KEYEVENTF_KEYUP), input(m, scan(m), KEYEVENTF_KEYUP)]);
+}
+
+unsafe fn focus(top: HWND) {
+    send(&[input(VIRTUAL_KEY(0xE8), 0, KEYBD_EVENT_FLAGS(0)), input(VIRTUAL_KEY(0xE8), 0, KEYEVENTF_KEYUP)]);
+    let _ = SetForegroundWindow(top);
 }
 
 fn text_of(edit: HWND) -> String {
@@ -103,9 +114,27 @@ fn main() {
             }
         }
     };
+    if std::env::args().any(|a| a == "--tray") {
+        unsafe {
+            focus(top);
+        }
+        std::thread::sleep(Duration::from_millis(300));
+        type_text("замок");
+        std::thread::sleep(Duration::from_millis(200));
+        unsafe {
+            let _ = SetForegroundWindow(FindWindowW(w!("Shell_TrayWnd"), None).unwrap_or_default());
+        }
+        println!("ready");
+        println!("{:?}", wait_text(edit, "lock", Duration::from_secs(10)));
+        unsafe {
+            let _ = PostMessageW(Some(top), WM_CLOSE, WPARAM(0), LPARAM(0));
+        }
+        let _ = child.wait();
+        return;
+    }
     if std::env::args().any(|a| a == "--demo") {
         unsafe {
-            let _ = SetForegroundWindow(top);
+            focus(top);
         }
         std::thread::sleep(Duration::from_millis(300));
         type_text("замок");
@@ -138,7 +167,7 @@ fn main() {
     });
     std::thread::sleep(Duration::from_millis(500));
     unsafe {
-        let _ = SetForegroundWindow(top);
+        focus(top);
     }
     std::thread::sleep(Duration::from_millis(300));
 

@@ -3,14 +3,19 @@ mod hint;
 mod tray;
 
 use hint::Hint;
+use std::sync::atomic::{AtomicBool, Ordering::SeqCst};
 use std::sync::OnceLock;
+use std::time::{Duration, Instant};
 use tauri::tray::TrayIcon;
 use tauri::AppHandle;
 use tolk_core::config::Config;
 use tolk_core::engine::{CoreEvent, Engine};
+use tolk_core::win::context;
+use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, IsIconic,IsWindow, SetForegroundWindow, ShowWindow, SW_RESTORE};
 
 static TRAY: OnceLock<TrayIcon> = OnceLock::new();
 static ENGINE: OnceLock<Engine> = OnceLock::new();
+static TRAY_BUSY: AtomicBool = AtomicBool::new(false);
 
 pub fn engine() -> &'static Engine {
     ENGINE.get().expect("engine")
@@ -44,6 +49,40 @@ fn pump(app: AppHandle, rx: crossbeam_channel::Receiver<CoreEvent>) {
     }
 }
 
+fn tray_click() {
+    if TRAY_BUSY.swap(true, SeqCst) {
+        return;
+    }
+    std::thread::spawn(|| {
+        if focus_last() {
+            engine().translate_now();
+        }
+        TRAY_BUSY.store(false, SeqCst);
+    });
+}
+
+fn focus_last() -> bool {
+    let hwnd = context::last_foreign();
+    if hwnd.is_invalid() || !unsafe { IsWindow(Some(hwnd)) }.as_bool() {
+        // TODO: фаза 9 — открыть окно-переводчик
+        return false;
+    }
+    unsafe {
+        if IsIconic(hwnd).as_bool() {
+            let _ = ShowWindow(hwnd, SW_RESTORE);
+        }
+        let _ = SetForegroundWindow(hwnd);
+    }
+    let start = Instant::now();
+    while start.elapsed() < Duration::from_millis(500) {
+        if unsafe { GetForegroundWindow() } == hwnd {
+            return true;
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    false
+}
+
 #[tauri::command]
 fn open_translator(text: String) {
     let _ = text;
@@ -59,7 +98,7 @@ pub fn run() {
             let _ = ENGINE.set(Engine::start(Config::load(), tx));
             let handle = app.handle().clone();
             std::thread::Builder::new().name("tolk-events".into()).spawn(move || pump(handle, rx))?;
-            let tray = tray::build(app.handle(), engine().config().enabled, |_| {})?;
+            let tray = tray::build(app.handle(), engine().config().enabled, |_| tray_click())?;
             let _ = TRAY.set(tray);
             Ok(())
         })

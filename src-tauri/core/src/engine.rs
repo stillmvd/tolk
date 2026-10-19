@@ -74,7 +74,7 @@ impl Engine {
     }
 
     pub fn translate_now(&self) {
-        let _ = self.tx.send(HookEvent::Translate);
+        let _ = self.tx.send(HookEvent::TranslateNow);
     }
 
     pub fn config(&self) -> Config {
@@ -147,7 +147,8 @@ impl Worker {
                     self.hide_hint();
                     self.buffer.reset()
                 }
-                HookEvent::Translate => self.translate(),
+                HookEvent::Translate => self.translate(false),
+                HookEvent::TranslateNow => self.translate(true),
                 HookEvent::Undo => self.undo(),
                 HookEvent::Area => self.emit(CoreEvent::Area),
                 HookEvent::Window => self.emit(CoreEvent::Window),
@@ -201,10 +202,17 @@ impl Worker {
         }
     }
 
-    fn translate(&mut self) {
+    fn translate(&mut self, tray: bool) {
         self.hide_hint();
-        keys::suppress_menu();
-        let ctx = context::current();
+        let ctx = if tray { context::refresh() } else { context::current() };
+        if tray {
+            let cfg = self.config.lock().unwrap().clone();
+            if !cfg.enabled || blocked(&ctx, &cfg) {
+                return;
+            }
+        } else {
+            keys::suppress_menu();
+        }
         let seq = hook::SEQ.load(SeqCst);
         let repeat = Duration::from_millis(self.config.lock().unwrap().repeat_ms as u64);
         if let Some(d) = self.done.take() {
@@ -242,6 +250,10 @@ impl Worker {
                 self.replace_typed(&ctx, before, start, 1, None, seq);
                 return;
             }
+        }
+        if tray {
+            // TODO: фаза 9 — открыть окно-переводчик
+            return self.notice("Нечего переводить");
         }
         keys::replay(hook::HK_TRANSLATE.load(SeqCst));
     }
