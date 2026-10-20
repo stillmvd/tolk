@@ -1,3 +1,5 @@
+import { MARK_BOTTOM, MARK_TOP } from "./mark";
+
 const PATHS = {
   copy: "M11.5 8.5h5a3 3 0 0 1 3 3v5a3 3 0 0 1-3 3h-5a3 3 0 0 1-3-3v-5a3 3 0 0 1 3-3ZM15.5 8.5V7a3 3 0 0 0-3-3H7a3 3 0 0 0-3 3v5.5a3 3 0 0 0 3 3h1.5",
   check: "M5 12.5 10 17.5 19 7",
@@ -28,8 +30,8 @@ export function Icon({ name }: { name: IconName }) {
 export function Mark() {
   return (
     <svg className="tk-mark" viewBox="0 0 16 16" aria-hidden="true" data-tauri-drag-region>
-      <path className="b" d="M4.5 1.5H11.5A3.5 3.5 0 0 1 15 5V8A3.5 3.5 0 0 1 11.5 11.5H7.8L4.6 14.6V11.5H4.5A3.5 3.5 0 0 1 1 8V5A3.5 3.5 0 0 1 4.5 1.5Z" />
-      <path className="s" d="M4.2 4.6H11.4M9.8 3.1 11.4 4.6 9.8 6.1M11.8 8.4H4.6M6.2 6.9 4.6 8.4 6.2 9.9" />
+      <path className="a" d={MARK_TOP} />
+      <path className="b" d={MARK_BOTTOM} />
     </svg>
   );
 }

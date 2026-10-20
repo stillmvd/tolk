@@ -33,8 +33,8 @@ body { font-variant-numeric: tabular-nums; }
 .tk-card .t-btn.p[data-state="done"] { background: var(--raised); color: var(--ok); }
 
 .tk-mark { display: block; flex: none; width: 16px; height: 16px; overflow: visible; }
+.tk-mark .a { fill: color-mix(in srgb, var(--tk) 60%, white); }
 .tk-mark .b { fill: var(--tk); }
-.tk-mark .s { fill: none; stroke: var(--tk-ink); stroke-width: 1.2; stroke-linecap: round; stroke-linejoin: round; }
 .code { flex: none; color: var(--dim); font-size: 11px; font-weight: 700; letter-spacing: 0.06em; line-height: 1.2; }
 
 :root[data-window="translator"], :root[data-window="translator"] body { background: transparent; overflow: hidden; }
