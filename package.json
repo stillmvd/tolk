@@ -12,7 +12,7 @@
     "ship": "ship"
   },
   "dependencies": {
-    "@stillmvd/tauri-ship": "github:stillmvd/tauri-ship#v0.1.1",
+    "@stillmvd/tauri-ship": "github:stillmvd/tauri-ship#v0.1.2",
     "@tauri-apps/api": "^2.12.0",
     "kockers-ds": "link:..\\..\\Kockers DS",
     "react": "^19.1.0",
